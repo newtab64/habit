@@ -290,22 +290,21 @@ pub fn draw_strength_curve(
     if pts.len() == 1 {
         cr.line_to(pts[0].x + 1.0, pts[0].y);
         cr.line_to(pts[0].x + 1.0, bottom_y);
-        cr.line_to(pts[0].x, bottom_y);
     } else {
         for window in pts.windows(2) {
             let p0 = window[0];
             let p1 = window[1];
-            let cp1_x = (p0.x + p1.x) / 2.0;
+            let cp1_x = f64::midpoint(p0.x, p1.x);
             let cp1_y = p0.y;
-            let cp2_x = (p0.x + p1.x) / 2.0;
+            let cp2_x = f64::midpoint(p0.x, p1.x);
             let cp2_y = p1.y;
             cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, p1.x, p1.y);
         }
         if let Some(last) = pts.last() {
             cr.line_to(last.x, bottom_y);
         }
-        cr.line_to(pts[0].x, bottom_y);
     }
+    cr.line_to(pts[0].x, bottom_y);
     cr.close_path();
 
     let gradient = cairo::LinearGradient::new(0.0, padding, 0.0, bottom_y);
@@ -323,9 +322,9 @@ pub fn draw_strength_curve(
         for window in pts.windows(2) {
             let p0 = window[0];
             let p1 = window[1];
-            let cp1_x = (p0.x + p1.x) / 2.0;
+            let cp1_x = f64::midpoint(p0.x, p1.x);
             let cp1_y = p0.y;
-            let cp2_x = (p0.x + p1.x) / 2.0;
+            let cp2_x = f64::midpoint(p0.x, p1.x);
             let cp2_y = p1.y;
             cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, p1.x, p1.y);
         }
@@ -344,13 +343,13 @@ pub fn draw_strength_curve(
 /// - Unreached future days: faint gray outline.
 #[cfg(feature = "ui")]
 #[allow(clippy::cast_possible_truncation)]
-pub fn draw_monthly_heatmap(
+pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
     cr: &cairo::Context,
     width: f64,
     height: f64,
     year: i32,
     month: u32,
-    entries: &std::collections::HashMap<chrono::NaiveDate, EntryStatus>,
+    entries: &std::collections::HashMap<chrono::NaiveDate, EntryStatus, S>,
     color: &Rgba,
 ) {
     if width <= 0.0 || height <= 0.0 || month == 0 || month > 12 {
@@ -406,16 +405,13 @@ pub fn draw_monthly_heatmap(
                 if date > today {
                     // Unreached future days: faint gray outline
                     cr.set_source_rgba(0.6, 0.6, 0.6, 0.25);
-                    cr.set_line_width(1.0);
-                    cr.rectangle(rect.x, rect.y, rect.width, rect.height);
-                    let _ = cr.stroke();
                 } else {
                     // Past day with no entry logged: muted outline
                     cr.set_source_rgba(0.5, 0.5, 0.5, 0.45);
-                    cr.set_line_width(1.0);
-                    cr.rectangle(rect.x, rect.y, rect.width, rect.height);
-                    let _ = cr.stroke();
                 }
+                cr.set_line_width(1.0);
+                cr.rectangle(rect.x, rect.y, rect.width, rect.height);
+                let _ = cr.stroke();
             }
         }
     }
