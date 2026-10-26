@@ -398,8 +398,8 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
 
     for habit in &habits {
         let habit_id = habit.id.unwrap_or(0);
-        let from_date = today.checked_sub_days(chrono::Days::new(30)).unwrap_or(today);
-        let entries = inner.db.get_entries(habit_id, from_date, today).unwrap_or_default();
+        let start_bound = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap_or(today);
+        let entries = inner.db.get_entries(habit_id, start_bound, today).unwrap_or_default();
         let strength = calculate_habit_strength(habit, &entries, today);
 
         let inner_toggle = Rc::clone(inner_rc);
@@ -415,6 +415,9 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         };
 
         let row_widget = HabitRowWidget::new(habit, strength, &entries, today, on_toggle, on_select);
+        if habit.id == inner.selected_habit_id {
+            row_widget.widget().add_css_class("selected");
+        }
         inner.habits_list_box.append(row_widget.widget());
     }
 
@@ -515,8 +518,8 @@ fn build_sidebar() -> SidebarWidgets {
 
     // Quick-check column headers
     let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
-    quick_check_header.set_margin_start(16);
-    quick_check_header.set_margin_end(16);
+    quick_check_header.set_margin_start(12);
+    quick_check_header.set_margin_end(12);
     quick_check_header.set_margin_top(8);
     quick_check_header.set_margin_bottom(8);
 
@@ -777,20 +780,17 @@ fn connect_controllers(
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
     add_btn.connect_clicked(move |_| {
-        let count = {
+        let create_res = {
             let inner = inner_add.borrow();
-            inner.db.get_habits().map_or(0, |h| h.len())
+            let count = inner.db.get_habits().map_or(0, |h| h.len());
+            let habit_name = format!("New Habit {}", count + 1);
+            let new_habit = Habit::new_binary(habit_name);
+            inner.db.create_habit(&new_habit)
         };
-        let habit_name = format!("New Habit {}", count + 1);
-        let new_habit = Habit::new_binary(habit_name);
-        {
-            let inner = inner_add.borrow();
-            if let Ok(id) = inner.db.create_habit(&new_habit) {
-                drop(inner);
-                let mut inner = inner_add.borrow_mut();
-                inner.selected_habit_id = Some(id);
-                inner.split_view.set_show_content(true);
-            }
+        if let Ok(id) = create_res {
+            let mut inner = inner_add.borrow_mut();
+            inner.selected_habit_id = Some(id);
+            inner.split_view.set_show_content(true);
         }
         refresh(&inner_add, &caches_add);
     });
