@@ -34,6 +34,8 @@ use crate::ui::charts::{
 use crate::ui::habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
 use crate::ui::habit_row::HabitRowWidget;
+#[cfg(feature = "ui")]
+use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog};
 
 /// Navigation state for the monthly calendar heatmap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,7 +277,7 @@ struct DrawCaches {
 #[cfg(feature = "ui")]
 struct WindowInner {
     split_view: libadwaita::NavigationSplitView,
-    db: Database,
+    db: Rc<RefCell<Database>>,
     selected_habit_id: Option<i64>,
     month_nav: MonthNavigation,
     habits_list_box: gtk4::Box,
@@ -297,6 +299,7 @@ struct SidebarWidgets {
     page: libadwaita::NavigationPage,
     habits_list_box: gtk4::Box,
     add_btn: gtk4::Button,
+    menu_btn: gtk4::MenuButton,
 }
 
 #[cfg(feature = "ui")]
@@ -351,8 +354,9 @@ fn handle_toggle(
 ) {
     let (habit, current_entry) = {
         let inner = inner_rc.borrow();
-        let habit = inner.db.get_habit(habit_id).ok().flatten();
-        let entry = inner.db.get_entry(habit_id, date).ok().flatten();
+        let db = inner.db.borrow();
+        let habit = db.get_habit(habit_id).ok().flatten();
+        let entry = db.get_entry(habit_id, date).ok().flatten();
         (habit, entry)
     };
 
@@ -360,7 +364,7 @@ fn handle_toggle(
         let (status, val) = toggle_entry_state(&habit, current_entry.as_ref(), val_opt);
         {
             let inner = inner_rc.borrow();
-            let _ = inner.db.log_entry(habit_id, date, status, val);
+            let _ = inner.db.borrow().log_entry(habit_id, date, status, val);
         }
         refresh(inner_rc, caches);
     }
@@ -385,7 +389,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     let today = chrono::Local::now().date_naive();
     let mut inner = inner_rc.borrow_mut();
 
-    let habits = inner.db.get_habits().unwrap_or_default();
+    let habits = inner.db.borrow().get_habits().unwrap_or_default();
 
     // Reconcile selected habit
     if inner.selected_habit_id.is_none() && !habits.is_empty() {
@@ -404,7 +408,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     for habit in &habits {
         let habit_id = habit.id.unwrap_or(0);
         let start_bound = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap_or(today);
-        let entries = inner.db.get_entries(habit_id, start_bound, today).unwrap_or_default();
+        let entries = inner.db.borrow().get_entries(habit_id, start_bound, today).unwrap_or_default();
         let strength = calculate_habit_strength(habit, &entries, today);
 
         let inner_toggle = Rc::clone(inner_rc);
@@ -439,7 +443,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             inner.color_badge.set_text(&selected_habit.accent_color);
 
             let start_bound = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap_or(today);
-            let all_entries = inner.db.get_entries(sel_id, start_bound, today).unwrap_or_default();
+            let all_entries = inner.db.borrow().get_entries(sel_id, start_bound, today).unwrap_or_default();
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
             inner.strength_card_value.set_text(&metrics.strength_percent);
@@ -461,7 +465,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
                 .unwrap_or(today);
             let m_to = NaiveDate::from_ymd_opt(inner.month_nav.year, inner.month_nav.month, days)
                 .unwrap_or(today);
-            let m_entries = inner.db.get_entries(sel_id, m_from, m_to).unwrap_or_default();
+            let m_entries = inner.db.borrow().get_entries(sel_id, m_from, m_to).unwrap_or_default();
 
             let mut map = HashMap::with_capacity(m_entries.len() + usize::try_from(days).unwrap_or(0));
             for e in m_entries {
@@ -570,6 +574,7 @@ fn build_sidebar() -> SidebarWidgets {
         page,
         habits_list_box,
         add_btn,
+        menu_btn,
     }
 }
 
@@ -797,10 +802,11 @@ fn connect_controllers(
         let inner_saved = Rc::clone(&inner_add);
         let caches_saved = caches_add.clone();
         show_habit_dialog(&win_add, None, move |new_habit| {
-            let create_res = {
+            let db = {
                 let inner = inner_saved.borrow();
-                inner.db.create_habit(&new_habit)
+                Rc::clone(&inner.db)
             };
+            let create_res = db.borrow().create_habit(&new_habit);
             if let Ok(id) = create_res {
                 let mut inner = inner_saved.borrow_mut();
                 inner.selected_habit_id = Some(id);
@@ -814,20 +820,22 @@ fn connect_controllers(
     let caches_edit = caches.clone();
     let win_edit = root_window.clone();
     details.edit_btn.connect_clicked(move |_| {
-        let habit_opt = {
+        let (selected_id, db) = {
             let inner = inner_edit.borrow();
-            inner.selected_habit_id.and_then(|id| inner.db.get_habit(id).ok().flatten())
+            (inner.selected_habit_id, Rc::clone(&inner.db))
         };
+        let habit_opt = selected_id.and_then(|id| db.borrow().get_habit(id).ok().flatten());
         if let Some(habit) = habit_opt {
             let inner_saved = Rc::clone(&inner_edit);
             let caches_saved = caches_edit.clone();
             show_habit_dialog(&win_edit, Some(&habit), move |updated_habit| {
                 let id_opt = updated_habit.id;
-                {
+                let db = {
                     let inner = inner_saved.borrow();
-                    if let Err(e) = inner.db.update_habit(&updated_habit) {
-                        eprintln!("Failed to update habit: {e}");
-                    }
+                    Rc::clone(&inner.db)
+                };
+                if let Err(e) = db.borrow().update_habit(&updated_habit) {
+                    eprintln!("Failed to update habit: {e}");
                 }
                 {
                     let mut inner = inner_saved.borrow_mut();
@@ -839,12 +847,142 @@ fn connect_controllers(
     });
 }
 
+#[cfg(feature = "ui")]
+fn setup_primary_menu(
+    window: &libadwaita::ApplicationWindow,
+    root_window: &gtk4::Window,
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    menu_btn: &gtk4::MenuButton,
+    toast_overlay: &libadwaita::ToastOverlay,
+) {
+    let menu_model = gtk4::gio::Menu::new();
+    menu_model.append(Some("Export Backup..."), Some("win.export-backup"));
+    menu_model.append(Some("Import Backup..."), Some("win.import-backup"));
+    menu_model.append(Some("About Habit"), Some("win.about"));
+    menu_btn.set_menu_model(Some(&menu_model));
+
+    // Export action
+    let action_export = gtk4::gio::SimpleAction::new("export-backup", None);
+    let inner_exp = Rc::clone(inner_rc);
+    let root_exp = root_window.clone();
+    let toast_exp = toast_overlay.clone();
+    action_export.connect_activate(move |_, _| {
+        let db = {
+            let inner = inner_exp.borrow();
+            Rc::clone(&inner.db)
+        };
+        let toast = toast_exp.clone();
+        trigger_export_dialog(&root_exp, db, move |res| match res {
+            Ok(path) => {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("backup.db");
+                toast.add_toast(libadwaita::Toast::new(&format!("Backup exported to {name}")));
+            }
+            Err(err) => {
+                if !err.contains("cancelled") && !err.contains("Dismissed") {
+                    toast.add_toast(libadwaita::Toast::new(&format!("Export failed: {err}")));
+                }
+            }
+        });
+    });
+    window.add_action(&action_export);
+
+    // Import action
+    let action_import = gtk4::gio::SimpleAction::new("import-backup", None);
+    let inner_imp = Rc::clone(inner_rc);
+    let caches_imp = caches.clone();
+    let root_imp = root_window.clone();
+    let toast_imp = toast_overlay.clone();
+    action_import.connect_activate(move |_, _| {
+        let db = {
+            let inner = inner_imp.borrow();
+            Rc::clone(&inner.db)
+        };
+        let toast = toast_imp.clone();
+        let inner_done = Rc::clone(&inner_imp);
+        let caches_done = caches_imp.clone();
+        trigger_import_dialog(&root_imp, db, move |res| match res {
+            Ok(_path) => {
+                toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
+                {
+                    let mut inner = inner_done.borrow_mut();
+                    inner.selected_habit_id = None;
+                }
+                refresh(&inner_done, &caches_done);
+            }
+            Err(err) => {
+                if !err.contains("cancelled") && !err.contains("Dismissed") {
+                    toast.add_toast(libadwaita::Toast::new(&format!("Import failed: {err}")));
+                }
+            }
+        });
+    });
+    window.add_action(&action_import);
+
+    // About action
+    let action_about = gtk4::gio::SimpleAction::new("about", None);
+    let root_about = root_window.clone();
+    action_about.connect_activate(move |_, _| {
+        let about = libadwaita::AboutDialog::builder()
+            .application_name("Habit")
+            .application_icon(crate::APP_ID)
+            .developer_name("Habit Contributors")
+            .version("0.1.0")
+            .license_type(gtk4::License::Gpl30)
+            .comments("A native, local-only Linux habit tracker app for GNOME")
+            .website("https://github.com/habit/habit")
+            .issue_url("https://github.com/habit/habit/issues")
+            .build();
+        about.present(Some(&root_about));
+    });
+    window.add_action(&action_about);
+}
+
+#[cfg(feature = "ui")]
+fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
+    let curve_data_draw = Rc::clone(&caches.curve_data);
+    let curve_color_draw = Rc::clone(&caches.curve_color);
+    details.curve_drawing_area.set_draw_func(move |_area, cr, width, height| {
+        let data = curve_data_draw.borrow();
+        let color = curve_color_draw.borrow();
+        draw_strength_curve(
+            cr,
+            f64::from(width),
+            f64::from(height),
+            &data,
+            &color,
+        );
+    });
+
+    let month_nav_draw = Rc::clone(&caches.month_nav);
+    let heatmap_entries_draw = Rc::clone(&caches.heatmap_entries);
+    let heatmap_color_draw = Rc::clone(&caches.heatmap_color);
+    details.heatmap_drawing_area.set_draw_func(move |_area, cr, width, height| {
+        let nav = month_nav_draw.borrow();
+        let entries = heatmap_entries_draw.borrow();
+        let color = heatmap_color_draw.borrow();
+        draw_monthly_heatmap(
+            cr,
+            f64::from(width),
+            f64::from(height),
+            nav.year,
+            nav.month,
+            &entries,
+            &color,
+        );
+    });
+}
+
 /// Main application window providing a 50/50 responsive split view between habits and analytics.
 #[cfg(feature = "ui")]
 #[derive(Debug, Clone)]
 pub struct HabitWindow {
     window: libadwaita::ApplicationWindow,
     split_view: libadwaita::NavigationSplitView,
+    toast_overlay: libadwaita::ToastOverlay,
 }
 
 #[cfg(feature = "ui")]
@@ -893,7 +1031,9 @@ impl HabitWindow {
         breakpoint.add_setter(&split_view, "collapsed", Some(&true.into()));
         window.add_breakpoint(breakpoint);
 
-        window.set_content(Some(&split_view));
+        let toast_overlay = libadwaita::ToastOverlay::new();
+        toast_overlay.set_child(Some(&split_view));
+        window.set_content(Some(&toast_overlay));
 
         let now = chrono::Local::now();
         let initial_nav = MonthNavigation::new(now.year(), now.month());
@@ -906,42 +1046,12 @@ impl HabitWindow {
             heatmap_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
         };
 
-        // Connect DrawingArea render functions
-        let curve_data_draw = Rc::clone(&caches.curve_data);
-        let curve_color_draw = Rc::clone(&caches.curve_color);
-        details.curve_drawing_area.set_draw_func(move |_area, cr, width, height| {
-            let data = curve_data_draw.borrow();
-            let color = curve_color_draw.borrow();
-            draw_strength_curve(
-                cr,
-                f64::from(width),
-                f64::from(height),
-                &data,
-                &color,
-            );
-        });
+        connect_drawing_areas(&details, &caches);
 
-        let month_nav_draw = Rc::clone(&caches.month_nav);
-        let heatmap_entries_draw = Rc::clone(&caches.heatmap_entries);
-        let heatmap_color_draw = Rc::clone(&caches.heatmap_color);
-        details.heatmap_drawing_area.set_draw_func(move |_area, cr, width, height| {
-            let nav = month_nav_draw.borrow();
-            let entries = heatmap_entries_draw.borrow();
-            let color = heatmap_color_draw.borrow();
-            draw_monthly_heatmap(
-                cr,
-                f64::from(width),
-                f64::from(height),
-                nav.year,
-                nav.month,
-                &entries,
-                &color,
-            );
-        });
-
+        let db_rc = Rc::new(RefCell::new(db));
         let inner = WindowInner {
             split_view: split_view.clone(),
-            db,
+            db: Rc::clone(&db_rc),
             selected_habit_id: None,
             month_nav: initial_nav,
             habits_list_box: sidebar.habits_list_box,
@@ -969,12 +1079,22 @@ impl HabitWindow {
             &sidebar.add_btn,
         );
 
+        setup_primary_menu(
+            &window,
+            &root_window,
+            &inner_rc,
+            &caches,
+            &sidebar.menu_btn,
+            &toast_overlay,
+        );
+
         // Initial populate and render
         refresh(&inner_rc, &caches);
 
         Self {
             window,
             split_view,
+            toast_overlay,
         }
     }
 
@@ -988,6 +1108,12 @@ impl HabitWindow {
     #[must_use]
     pub const fn split_view(&self) -> &libadwaita::NavigationSplitView {
         &self.split_view
+    }
+
+    /// Returns a reference to the `libadwaita::ToastOverlay`.
+    #[must_use]
+    pub const fn toast_overlay(&self) -> &libadwaita::ToastOverlay {
+        &self.toast_overlay
     }
 
     /// Presents the application window to the user.

@@ -16,7 +16,7 @@ cairo-rs = { version = "0.20", optional = true }
 
 [features]
 default = []
-ui = ["dep:gtk4", "dep:libadwaita", "dep:cairo-rs", "libadwaita/v1_5"]
+ui = ["dep:gtk4", "dep:libadwaita", "dep:cairo-rs", "gtk4/v4_10", "libadwaita/v1_5"]
 
 [lints.rust]
 unsafe_code = "forbid"
