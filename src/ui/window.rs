@@ -198,7 +198,7 @@ pub struct HabitMetrics {
     pub score_percent: String,
     /// Habit strength score in `[0.0, 1.0]` (alias for score).
     pub strength: f64,
-    /// Formatted strength percentage (alias for score_percent).
+    /// Formatted strength percentage (alias for `score_percent`).
     pub strength_percent: String,
     /// Current consecutive active day streak count.
     pub current_streak: u32,
@@ -258,7 +258,7 @@ pub fn toggle_entry_state(
         },
         |val| {
             if (val - (-1.0)).abs() < 1e-6 {
-                if current_entry.map_or(false, |e| e.status == EntryStatus::Skipped) {
+                if current_entry.is_some_and(|e| e.status == EntryStatus::Skipped) {
                     (EntryStatus::Missed, 0.0)
                 } else {
                     (EntryStatus::Skipped, 0.0)

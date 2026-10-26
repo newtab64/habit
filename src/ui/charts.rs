@@ -344,13 +344,44 @@ pub fn draw_strength_curve(
 }
 
 #[cfg(feature = "ui")]
-fn draw_rounded_rect(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
-    let radius = r.min(w / 2.0).min(h / 2.0);
+fn draw_rounded_rect(
+    cr: &cairo::Context,
+    pos_x: f64,
+    pos_y: f64,
+    width: f64,
+    height: f64,
+    corner_radius: f64,
+) {
+    let radius = corner_radius.min(width / 2.0).min(height / 2.0);
     cr.new_sub_path();
-    cr.arc(x + w - radius, y + radius, radius, -std::f64::consts::FRAC_PI_2, 0.0);
-    cr.arc(x + w - radius, y + h - radius, radius, 0.0, std::f64::consts::FRAC_PI_2);
-    cr.arc(x + radius, y + h - radius, radius, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
-    cr.arc(x + radius, y + radius, radius, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2);
+    cr.arc(
+        pos_x + width - radius,
+        pos_y + radius,
+        radius,
+        -std::f64::consts::FRAC_PI_2,
+        0.0,
+    );
+    cr.arc(
+        pos_x + width - radius,
+        pos_y + height - radius,
+        radius,
+        0.0,
+        std::f64::consts::FRAC_PI_2,
+    );
+    cr.arc(
+        pos_x + radius,
+        pos_y + height - radius,
+        radius,
+        std::f64::consts::FRAC_PI_2,
+        std::f64::consts::PI,
+    );
+    cr.arc(
+        pos_x + radius,
+        pos_y + radius,
+        radius,
+        std::f64::consts::PI,
+        3.0 * std::f64::consts::FRAC_PI_2,
+    );
     cr.close_path();
 }
 
@@ -455,7 +486,7 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
         if is_rest {
             let dash_w = rect.width * 0.4;
             let dash_x = rect.x + (rect.width - dash_w) / 2.0;
-            let dash_y = rect.y + rect.height * 0.78;
+            let dash_y = rect.height.mul_add(0.78, rect.y);
             cr.set_source_rgba(color.r, color.g, color.b, 0.85);
             cr.set_line_width(2.0);
             cr.move_to(dash_x, dash_y);
@@ -469,7 +500,7 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
         cr.set_source_rgba(text_color.r, text_color.g, text_color.b, text_color.a);
         if let Ok(extents) = cr.text_extents(&day_str) {
             let target_y = if is_rest {
-                rect.y + rect.height * 0.42
+                rect.height.mul_add(0.42, rect.y)
             } else {
                 rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing()
             };
