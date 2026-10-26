@@ -7,7 +7,7 @@ description = "A native, local-only Linux habit tracker app for GNOME"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled", "backup"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 gtk4 = { version = "0.9", optional = true }
