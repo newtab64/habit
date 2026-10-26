@@ -301,9 +301,11 @@ struct WindowInner {
     db: Rc<RefCell<Database>>,
     selected_habit_id: Option<i64>,
     heatmap_week_offset: usize,
+    is_heatmap_editing: bool,
     habits_list_box: gtk4::Box,
     habit_score_label: gtk4::Label,
     header_day_labels: Vec<gtk4::Label>,
+    habit_css_provider: gtk4::CssProvider,
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
@@ -315,6 +317,7 @@ struct WindowInner {
     curve_drawing_area: gtk4::DrawingArea,
     today_week_btn: gtk4::Button,
     next_week_btn: gtk4::Button,
+    edit_mode_btn: gtk4::ToggleButton,
     heatmap_drawing_area: gtk4::DrawingArea,
 }
 
@@ -344,6 +347,7 @@ struct DetailsWidgets {
     prev_week_btn: gtk4::Button,
     today_week_btn: gtk4::Button,
     next_week_btn: gtk4::Button,
+    edit_mode_btn: gtk4::ToggleButton,
     heatmap_drawing_area: gtk4::DrawingArea,
 }
 
@@ -401,6 +405,8 @@ fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, habit
     let (nav_view, details_page, should_push) = {
         let mut inner = inner_rc.borrow_mut();
         inner.selected_habit_id = Some(habit_id);
+        inner.is_heatmap_editing = false;
+        inner.edit_mode_btn.set_active(false);
         let should_push = inner.nav_view.find_page("details").is_none();
         (
             inner.nav_view.clone(),
@@ -431,18 +437,27 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
     }
 
-    // 0. Update header date labels
-    let dates = crate::ui::habit_row::calculate_7_day_dates(today);
+    // 0. Update header date labels (5 days: today on the left)
+    let dates = crate::ui::habit_row::calculate_5_day_dates(today);
     for (i, d) in dates.iter().enumerate() {
         if let Some(lbl) = inner.header_day_labels.get(i) {
             lbl.set_text(&d.format("%m/%d").to_string());
         }
     }
 
+    // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles)
+    let mut full_css = String::from(".habit-title { font-weight: 700 !important; }\n");
+    for h in &habits {
+        if let Some(hid) = h.id {
+            full_css.push_str(&crate::ui::habit_row::generate_row_css(hid, &h.accent_color));
+        }
+    }
+    inner.habit_css_provider.load_from_data(&full_css);
+
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
     left_group.add_widget(&inner.habit_score_label);
 
-    let col_groups: Vec<gtk4::SizeGroup> = (0..7)
+    let col_groups: Vec<gtk4::SizeGroup> = (0..5)
         .map(|i| {
             let sg = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
             if let Some(lbl) = inner.header_day_labels.get(i) {
@@ -610,11 +625,12 @@ fn build_sidebar() -> SidebarWidgets {
 
     let sidebar_scrolled = gtk4::ScrolledWindow::new();
     sidebar_scrolled.set_vexpand(true);
+    sidebar_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
-    // Quick-check column headers
-    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+    // Quick-check column headers with gap 24
+    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
     quick_check_header.set_margin_top(8);
@@ -630,8 +646,8 @@ fn build_sidebar() -> SidebarWidgets {
     let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     days_header_box.set_halign(gtk4::Align::End);
     let today = chrono::Local::now().date_naive();
-    let dates = crate::ui::habit_row::calculate_7_day_dates(today);
-    let mut header_day_labels = Vec::with_capacity(7);
+    let dates = crate::ui::habit_row::calculate_5_day_dates(today);
+    let mut header_day_labels = Vec::with_capacity(5);
     for date in dates {
         let date_str = date.format("%m/%d").to_string();
         let lbl = gtk4::Label::new(Some(&date_str));
@@ -702,6 +718,7 @@ fn build_heatmap_section() -> (
     gtk4::Button,
     gtk4::Button,
     gtk4::Button,
+    gtk4::ToggleButton,
     gtk4::DrawingArea,
 ) {
     let heatmap_nav_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
@@ -713,6 +730,11 @@ fn build_heatmap_section() -> (
     heatmap_title.set_halign(gtk4::Align::Start);
     heatmap_title.set_hexpand(true);
     heatmap_nav_box.append(&heatmap_title);
+
+    let edit_mode_btn = gtk4::ToggleButton::new();
+    edit_mode_btn.set_icon_name("document-edit-symbolic");
+    edit_mode_btn.set_tooltip_text(Some("Toggle Heatmap Edit Mode"));
+    heatmap_nav_box.append(&edit_mode_btn);
 
     let nav_buttons = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     nav_buttons.add_css_class("linked");
@@ -732,7 +754,7 @@ fn build_heatmap_section() -> (
     heatmap_nav_box.append(&nav_buttons);
 
     let heatmap_drawing_area = gtk4::DrawingArea::new();
-    heatmap_drawing_area.set_content_height(160);
+    heatmap_drawing_area.set_content_height(220);
     heatmap_drawing_area.set_hexpand(true);
 
     (
@@ -740,6 +762,7 @@ fn build_heatmap_section() -> (
         prev_week_btn,
         today_week_btn,
         next_week_btn,
+        edit_mode_btn,
         heatmap_drawing_area,
     )
 }
@@ -813,13 +836,20 @@ fn build_details() -> DetailsWidgets {
     let sep4 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep4);
 
-    let (heatmap_nav_box, prev_week_btn, today_week_btn, next_week_btn, heatmap_drawing_area) =
-        build_heatmap_section();
+    let (
+        heatmap_nav_box,
+        prev_week_btn,
+        today_week_btn,
+        next_week_btn,
+        edit_mode_btn,
+        heatmap_drawing_area,
+    ) = build_heatmap_section();
     details_vbox.append(&heatmap_nav_box);
     details_vbox.append(&heatmap_drawing_area);
 
     let details_scrolled = gtk4::ScrolledWindow::new();
     details_scrolled.set_vexpand(true);
+    details_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
     details_scrolled.set_child(Some(&details_vbox));
     content_box.append(&details_scrolled);
 
@@ -840,6 +870,7 @@ fn build_details() -> DetailsWidgets {
         prev_week_btn,
         today_week_btn,
         next_week_btn,
+        edit_mode_btn,
         heatmap_drawing_area,
     }
 }
@@ -882,6 +913,12 @@ fn connect_controllers(
         refresh(&inner_next, &caches_next);
     });
 
+    let inner_edit_mode = Rc::clone(inner_rc);
+    details.edit_mode_btn.connect_toggled(move |btn| {
+        let is_active = btn.is_active();
+        inner_edit_mode.borrow_mut().is_heatmap_editing = is_active;
+    });
+
     let heatmap_gesture = gtk4::GestureClick::new();
     let inner_gesture = Rc::clone(inner_rc);
     let caches_gesture = caches.clone();
@@ -892,10 +929,17 @@ fn connect_controllers(
         };
         let width = f64::from(area.width());
         let height = f64::from(area.height());
-        let (selected_id, week_offset) = {
+        let (selected_id, week_offset, is_editing) = {
             let inner = inner_gesture.borrow();
-            (inner.selected_habit_id, inner.heatmap_week_offset)
+            (
+                inner.selected_habit_id,
+                inner.heatmap_week_offset,
+                inner.is_heatmap_editing,
+            )
         };
+        if !is_editing {
+            return;
+        }
         if let Some(habit_id) = selected_id {
             let today = chrono::Local::now().date_naive();
             if let Some(clicked_date) =
@@ -1215,6 +1259,15 @@ impl HabitWindow {
 
         connect_drawing_areas(&details, &caches);
 
+        let habit_css_provider = gtk4::CssProvider::new();
+        if let Some(display) = gtk4::gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &habit_css_provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+
         let db_rc = Rc::new(RefCell::new(db));
         let inner = WindowInner {
             nav_view: nav_view.clone(),
@@ -1222,9 +1275,11 @@ impl HabitWindow {
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
             heatmap_week_offset: 0,
+            is_heatmap_editing: false,
             habits_list_box: sidebar.habits_list_box,
             habit_score_label: sidebar.habit_score_label,
             header_day_labels: sidebar.header_day_labels,
+            habit_css_provider,
             title_label: details.title_label,
             subtitle_label: details.subtitle_label,
             color_badge: details.color_badge,
@@ -1236,6 +1291,7 @@ impl HabitWindow {
             curve_drawing_area: details.curve_drawing_area,
             today_week_btn: details.today_week_btn,
             next_week_btn: details.next_week_btn,
+            edit_mode_btn: details.edit_mode_btn.clone(),
             heatmap_drawing_area: details.heatmap_drawing_area,
         };
 

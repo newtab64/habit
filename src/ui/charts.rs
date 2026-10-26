@@ -314,7 +314,7 @@ pub fn calculate_loop_heatmap_layout(
     let weekday_col_width = 18.0;
 
     let avail_h = (height - 2.0 * padding).max(24.0);
-    let square_size = (avail_h / 8.0).floor().clamp(10.0, 24.0);
+    let square_size = (avail_h / 8.0).floor().clamp(12.0, 30.0);
     let cell_size = (square_size - square_spacing).max(2.0);
 
     let avail_w = (width - 2.0 * padding - weekday_col_width).max(square_size);
@@ -673,10 +673,10 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
     }
 
     let layout = calculate_loop_heatmap_layout(width, height, today, week_offset);
-    let cell_radius = (layout.cell_size * 0.16).clamp(2.0, 4.0);
+    let cell_radius = (layout.cell_size * 0.18).clamp(2.5, 5.0);
 
     // 1. Draw Month / Year column headers along row 0
-    cr.set_font_size((layout.square_size * 0.55).clamp(8.0, 11.0));
+    cr.set_font_size((layout.square_size * 0.55).clamp(9.0, 13.0));
     cr.set_source_rgba(0.65, 0.65, 0.68, 0.85);
 
     let mut last_month: Option<u32> = None;
@@ -724,7 +724,7 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
 
     // 2. Draw Weekday labels on the right side
     let weekday_labels = ["M", "T", "W", "T", "F", "S", "S"];
-    cr.set_font_size((layout.square_size * 0.5).clamp(8.0, 10.5));
+    cr.set_font_size((layout.square_size * 0.5).clamp(8.5, 11.5));
     cr.set_source_rgba(0.55, 0.55, 0.58, 0.75);
 
     let right_x = layout.padding + (layout.n_cols as f64) * layout.square_size + 4.0;
@@ -791,7 +791,7 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
 
             // Draw centered day number text (1..31)
             let day_str = cell_date.day().to_string();
-            cr.set_font_size((layout.cell_size * 0.46).clamp(7.5, 10.5));
+            cr.set_font_size((layout.cell_size * 0.48).clamp(8.5, 12.0));
             cr.set_source_rgba(text_color.r, text_color.g, text_color.b, text_color.a);
             if let Ok(extents) = cr.text_extents(&day_str) {
                 let target_y = if is_rest {

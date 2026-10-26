@@ -4,8 +4,28 @@ use chrono::{Datelike, NaiveDate};
 #[cfg(feature = "ui")]
 use gtk4::prelude::*;
 
-/// Number of days displayed in the quick-check row (today plus previous 6 days).
-pub const QUICK_CHECK_DAYS: usize = 7;
+/// Number of days displayed in the quick-check row (5 days: today down to today - 4).
+pub const QUICK_CHECK_DAYS: usize = 5;
+
+/// Calculates the array of 5 consecutive dates starting from `today` on the left (`today` down to `today - 4`).
+#[must_use]
+pub fn calculate_5_day_dates(today: NaiveDate) -> [NaiveDate; 5] {
+    [
+        today,
+        today
+            .checked_sub_signed(chrono::Duration::days(1))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(2))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(3))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(4))
+            .unwrap_or(today),
+    ]
+}
 
 /// Visual display attributes for a single day column in a habit row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,20 +177,28 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
 
     format!(
         ".habit-row-{habit_id} .symbol-completed,\n\
-         .habit-row-{habit_id} .symbol-rest {{\n  \
-             color: {color};\n\
+         .habit-row-{habit_id} .symbol-rest,\n\
+         .habit-row-{habit_id} .day-symbol-button .symbol-completed,\n\
+         .habit-row-{habit_id} .day-symbol-button .symbol-rest {{\n  \
+             color: {color} !important;\n\
          }}\n\
          .habit-row-{habit_id} .symbol-missed,\n\
-         .habit-row-{habit_id} .symbol-partial {{\n  \
-             color: #77767b;\n  \
+         .habit-row-{habit_id} .symbol-partial,\n\
+         .habit-row-{habit_id} .day-symbol-button .symbol-missed,\n\
+         .habit-row-{habit_id} .day-symbol-button .symbol-partial {{\n  \
+             color: #77767b !important;\n  \
              opacity: 0.55;\n\
          }}\n\
+         .habit-row-{habit_id} progressbar > trough > progress,\n\
+         .habit-row-{habit_id} .habit-progress > trough > progress,\n\
          .habit-row-{habit_id} .habit-progress progress {{\n  \
-             background-color: {color};\n  \
+             background-color: {color} !important;\n  \
+             background: {color} !important;\n  \
              min-height: 5px;\n  \
              height: 5px;\n  \
              border-radius: 3px;\n\
          }}\n\
+         .habit-row-{habit_id} progressbar > trough,\n\
          .habit-row-{habit_id} .habit-progress trough {{\n  \
              min-height: 5px;\n  \
              height: 5px;\n  \
@@ -221,6 +249,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     title_label.set_halign(gtk4::Align::Start);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");
+    title_label.add_css_class("heading");
     left_box.append(&title_label);
 
     let progress_bar = gtk4::ProgressBar::new();
@@ -317,32 +346,24 @@ impl HabitRowWidget {
         let habit_id = habit.id.unwrap_or(0);
         let on_toggle = std::rc::Rc::new(on_toggle);
 
-        // Main horizontal container
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        // Main horizontal container with gap between habit info and tickboxes
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
         container.add_css_class("habit-row");
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);
-
-        // Apply custom scoped CSS provider to this row widget
-        let css = generate_row_css(habit_id, &habit.accent_color);
-        let provider = gtk4::CssProvider::new();
-        provider.load_from_data(&css);
-        container
-            .style_context()
-            .add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
         let (left_box, title_label, progress_bar) =
             create_left_pane(&habit.name, score, habit_id, on_select);
         container.append(&left_box);
 
-        // Right box: 7 day symbol columns
+        // Right box: 5 day symbol columns (today on the left)
         let days_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         days_box.set_halign(gtk4::Align::End);
         days_box.set_valign(gtk4::Align::Center);
 
-        let dates = calculate_7_day_dates(today);
+        let dates = calculate_5_day_dates(today);
         let is_measurable = habit.habit_type.is_measurable();
-        let mut day_buttons = Vec::with_capacity(7);
+        let mut day_buttons = Vec::with_capacity(5);
 
         for date in dates {
             let entry = entries.iter().find(|e| e.date == date);
