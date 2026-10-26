@@ -283,6 +283,10 @@ fn test_generate_row_css_structure_and_styling() {
     assert!(css.contains(".symbol-rest"));
     assert!(css.contains("#3584E4"));
 
+    // Muted color applied to missed and partial symbols
+    assert!(css.contains(".symbol-missed"));
+    assert!(css.contains(".symbol-partial"));
+
     // Progress bar fill and height
     assert!(css.contains(".habit-progress progress"));
     assert!(css.contains("5px"), "Progress bar height must be 5px");

@@ -137,6 +137,11 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
          .habit-row-{habit_id} .symbol-rest {{\n  \
              color: {color};\n\
          }}\n\
+         .habit-row-{habit_id} .symbol-missed,\n\
+         .habit-row-{habit_id} .symbol-partial {{\n  \
+             color: #77767b;\n  \
+             opacity: 0.55;\n\
+         }}\n\
          .habit-row-{habit_id} .habit-progress progress {{\n  \
              background-color: {color};\n  \
              min-height: 5px;\n  \
@@ -203,7 +208,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
 }
 
 #[cfg(feature = "ui")]
-fn attach_measurable_popover<F: Fn(i64, NaiveDate) + 'static>(
+fn attach_measurable_popover<F: Fn(i64, NaiveDate, Option<f64>) + 'static>(
     parent: &gtk4::Button,
     habit: &Habit,
     entry: Option<&HabitEntry>,
@@ -240,9 +245,11 @@ fn attach_measurable_popover<F: Fn(i64, NaiveDate) + 'static>(
     log_btn.add_css_class("suggested-action");
 
     let pop_close = popover.clone();
+    let spin_clone = spin.clone();
     log_btn.connect_clicked(move |_| {
+        let val = spin_clone.value();
         pop_close.popdown();
-        on_toggle(habit_id, date);
+        on_toggle(habit_id, date, Some(val));
     });
     pop_box.append(&log_btn);
 
@@ -262,7 +269,7 @@ impl HabitRowWidget {
     /// * `strength` - Current habit strength in range $[0.0, 1.0]$.
     /// * `entries` - Historical entries for this habit.
     /// * `today` - The reference calendar date.
-    /// * `on_toggle` - Callback invoked when a day symbol is clicked / logged: `(habit_id, date)`.
+    /// * `on_toggle` - Callback invoked when a day symbol is clicked / logged: `(habit_id, date, Option<value>)`.
     /// * `on_select` - Callback invoked when the habit title or row is selected: `(habit_id)`.
     #[allow(deprecated)]
     pub fn new<F1, F2>(
@@ -274,7 +281,7 @@ impl HabitRowWidget {
         on_select: F2,
     ) -> Self
     where
-        F1: Fn(i64, NaiveDate) + 'static,
+        F1: Fn(i64, NaiveDate, Option<f64>) + 'static,
         F2: Fn(i64) + 'static,
     {
         let habit_id = habit.id.unwrap_or(0);
@@ -324,6 +331,9 @@ impl HabitRowWidget {
             let day_label = gtk4::Label::new(Some(&display.text));
             day_label.add_css_class("day-symbol");
             day_label.add_css_class(display.css_class);
+            if !display.is_accent {
+                day_label.add_css_class("dim-label");
+            }
             day_label.set_width_chars(3);
             day_btn.set_child(Some(&day_label));
 
@@ -339,7 +349,7 @@ impl HabitRowWidget {
             } else {
                 let on_toggle_clone = on_toggle.clone();
                 day_btn.connect_clicked(move |_| {
-                    on_toggle_clone(habit_id, date);
+                    on_toggle_clone(habit_id, date, None);
                 });
             }
 
