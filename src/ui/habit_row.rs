@@ -18,18 +18,29 @@ pub struct DaySymbolDisplay {
     pub is_accent: bool,
 }
 
-/// Calculates the array of 7 consecutive dates ending on `today` (descending: today, today-1, ..., today-6).
+/// Calculates the array of 7 consecutive dates ending on `today` (chronological left-to-right: today-6 to today).
 #[must_use]
 pub fn calculate_7_day_dates(today: NaiveDate) -> [NaiveDate; 7] {
     [
-        today,
-        today.checked_sub_signed(chrono::Duration::days(1)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(2)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(3)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(4)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(5)).unwrap_or(today),
         today.checked_sub_signed(chrono::Duration::days(6)).unwrap_or(today),
+        today.checked_sub_signed(chrono::Duration::days(5)).unwrap_or(today),
+        today.checked_sub_signed(chrono::Duration::days(4)).unwrap_or(today),
+        today.checked_sub_signed(chrono::Duration::days(3)).unwrap_or(today),
+        today.checked_sub_signed(chrono::Duration::days(2)).unwrap_or(today),
+        today.checked_sub_signed(chrono::Duration::days(1)).unwrap_or(today),
+        today,
     ]
+}
+
+/// Cycles to the next entry status in the sequence:
+/// `None / Missed` -> `Completed` -> `Skipped` -> `Missed`.
+#[must_use]
+pub const fn next_toggle_status(current: Option<EntryStatus>) -> EntryStatus {
+    match current {
+        None | Some(EntryStatus::Missed) => EntryStatus::Completed,
+        Some(EntryStatus::Completed) => EntryStatus::Skipped,
+        Some(EntryStatus::Skipped) => EntryStatus::Missed,
+    }
 }
 
 /// Formats a floating-point measurable value without unnecessary trailing `.0` or decimals.
@@ -65,11 +76,11 @@ pub fn format_day_symbol(
 ) -> DaySymbolDisplay {
     let is_scheduled = habit.is_scheduled_on(date.weekday());
 
-    // Explicit manual skip always displays as rest dash
+    // Explicit manual skip always displays as rest pause symbol
     if let Some(e) = entry {
         if e.status == EntryStatus::Skipped {
             return DaySymbolDisplay {
-                text: "—".to_string(),
+                text: "⏸".to_string(),
                 css_class: "symbol-rest",
                 is_accent: true,
             };
@@ -157,7 +168,10 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
              border: none;\n  \
              background: none;\n  \
              box-shadow: none;\n  \
-             min-width: 28px;\n\
+             min-width: 36px;\n  \
+             width: 36px;\n  \
+             height: 36px;\n  \
+             padding: 0;\n\
          }}\n"
     )
 }
@@ -326,6 +340,7 @@ impl HabitRowWidget {
             let day_btn = gtk4::Button::new();
             day_btn.add_css_class("flat");
             day_btn.add_css_class("day-symbol-button");
+            day_btn.set_size_request(36, 36);
 
             let day_label = gtk4::Label::new(Some(&display.text));
             day_label.add_css_class("day-symbol");
@@ -333,7 +348,8 @@ impl HabitRowWidget {
             if !display.is_accent {
                 day_label.add_css_class("dim-label");
             }
-            day_label.set_width_chars(3);
+            day_label.set_halign(gtk4::Align::Center);
+            day_label.set_valign(gtk4::Align::Center);
             day_btn.set_child(Some(&day_label));
 
             if is_measurable {
@@ -350,6 +366,14 @@ impl HabitRowWidget {
                 day_btn.connect_clicked(move |_| {
                     on_toggle_clone(habit_id, date, None);
                 });
+
+                let on_toggle_secondary = on_toggle.clone();
+                let right_click = gtk4::GestureClick::new();
+                right_click.set_button(3);
+                right_click.connect_pressed(move |_, _, _, _| {
+                    on_toggle_secondary(habit_id, date, Some(-1.0));
+                });
+                day_btn.add_controller(right_click);
             }
 
             days_box.append(&day_btn);
