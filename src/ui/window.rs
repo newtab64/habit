@@ -19,8 +19,8 @@ use crate::engine::models::{
     SCHEDULE_SAT, SCHEDULE_SUN, SCHEDULE_THU, SCHEDULE_TUE, SCHEDULE_WED, SCHEDULE_WEEKENDS,
     SCHEDULE_WORKDAYS,
 };
-use crate::engine::scoring::{calculate_habit_strength, calculate_streaks};
-use crate::ui::habit_row::format_measurable_value;
+use crate::engine::scoring::{calculate_habit_score, calculate_streaks};
+use crate::ui::habit_row::{format_measurable_value, next_toggle_status};
 
 #[cfg(feature = "ui")]
 use crate::engine::db::Database;
@@ -158,12 +158,18 @@ pub fn format_schedule_summary(scheduled_days: u8) -> String {
     days.join(", ")
 }
 
-/// Formats habit strength in `[0.0, 1.0]` into a rounded percentage string (e.g. `"88%"`).
+/// Formats habit score in `[0.0, 1.0]` into a rounded percentage string (e.g. `"88%"`).
 #[must_use]
-pub fn format_strength_percentage(strength: f64) -> String {
-    let clamped = strength.clamp(0.0, 1.0);
+pub fn format_score_percentage(score: f64) -> String {
+    let clamped = score.clamp(0.0, 1.0);
     let pct = (clamped * 100.0).round();
     format!("{pct:.0}%")
+}
+
+/// Backwards-compatibility alias for `format_score_percentage`.
+#[must_use]
+pub fn format_strength_percentage(strength: f64) -> String {
+    format_score_percentage(strength)
 }
 
 /// Formats a streak count into a badge string (e.g. `"4d"`).
@@ -186,9 +192,13 @@ pub fn format_target_summary(habit: &Habit) -> String {
 /// Computed analytics metrics for a habit.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HabitMetrics {
-    /// Habit strength score in `[0.0, 1.0]`.
+    /// Habit score in `[0.0, 1.0]`.
+    pub score: f64,
+    /// Formatted score percentage (e.g. `"88%"`).
+    pub score_percent: String,
+    /// Habit strength score in `[0.0, 1.0]` (alias for score).
     pub strength: f64,
-    /// Formatted strength percentage (e.g. `"88%"`).
+    /// Formatted strength percentage (alias for score_percent).
     pub strength_percent: String,
     /// Current consecutive active day streak count.
     pub current_streak: u32,
@@ -200,18 +210,21 @@ pub struct HabitMetrics {
     pub best_streak_text: String,
 }
 
-/// Calculates strength and streak analytics for a habit given its entries and evaluation date.
+/// Calculates score and streak analytics for a habit given its entries and evaluation date.
 #[must_use]
 pub fn calculate_habit_metrics(
     habit: &Habit,
     entries: &[HabitEntry],
     as_of: NaiveDate,
 ) -> HabitMetrics {
-    let strength = calculate_habit_strength(habit, entries, as_of);
+    let score = calculate_habit_score(habit, entries, as_of);
+    let pct = format_score_percentage(score);
     let (current_streak, best_streak) = calculate_streaks(habit, entries, as_of);
     HabitMetrics {
-        strength,
-        strength_percent: format_strength_percentage(strength),
+        score,
+        score_percent: pct.clone(),
+        strength: score,
+        strength_percent: pct,
         current_streak,
         current_streak_text: format_streak_badge(current_streak),
         best_streak,
@@ -228,36 +241,44 @@ pub fn toggle_entry_state(
 ) -> (EntryStatus, f64) {
     new_value.map_or_else(
         || match &habit.habit_type {
-            HabitType::Binary => current_entry.map_or((EntryStatus::Completed, 1.0), |entry| {
-                if entry.status == EntryStatus::Completed {
-                    (EntryStatus::Missed, 0.0)
-                } else {
-                    (EntryStatus::Completed, 1.0)
+            HabitType::Binary => {
+                let next = next_toggle_status(current_entry.map(|e| e.status));
+                match next {
+                    EntryStatus::Completed => (EntryStatus::Completed, 1.0),
+                    EntryStatus::Skipped | EntryStatus::Missed => (next, 0.0),
                 }
-            }),
+            }
             HabitType::Measurable { target, .. } => {
-                current_entry.map_or((EntryStatus::Completed, *target), |entry| {
-                    if entry.status == EntryStatus::Completed {
-                        (EntryStatus::Missed, 0.0)
-                    } else {
-                        (EntryStatus::Completed, *target)
-                    }
-                })
+                let next = next_toggle_status(current_entry.map(|e| e.status));
+                match next {
+                    EntryStatus::Completed => (EntryStatus::Completed, *target),
+                    EntryStatus::Skipped | EntryStatus::Missed => (next, 0.0),
+                }
             }
         },
-        |val| match &habit.habit_type {
-            HabitType::Binary => {
-                if val >= 1.0 {
-                    (EntryStatus::Completed, 1.0)
-                } else {
+        |val| {
+            if (val - (-1.0)).abs() < 1e-6 {
+                if current_entry.map_or(false, |e| e.status == EntryStatus::Skipped) {
                     (EntryStatus::Missed, 0.0)
-                }
-            }
-            HabitType::Measurable { target, .. } => {
-                if val >= *target {
-                    (EntryStatus::Completed, val)
                 } else {
-                    (EntryStatus::Missed, val)
+                    (EntryStatus::Skipped, 0.0)
+                }
+            } else {
+                match &habit.habit_type {
+                    HabitType::Binary => {
+                        if val >= 1.0 {
+                            (EntryStatus::Completed, 1.0)
+                        } else {
+                            (EntryStatus::Missed, 0.0)
+                        }
+                    }
+                    HabitType::Measurable { target, .. } => {
+                        if val >= *target {
+                            (EntryStatus::Completed, val)
+                        } else {
+                            (EntryStatus::Missed, val)
+                        }
+                    }
                 }
             }
         },
@@ -276,18 +297,18 @@ struct DrawCaches {
 
 #[cfg(feature = "ui")]
 struct WindowInner {
-    split_view: libadwaita::NavigationSplitView,
+    nav_view: libadwaita::NavigationView,
+    details_page: libadwaita::NavigationPage,
     db: Rc<RefCell<Database>>,
     selected_habit_id: Option<i64>,
     month_nav: MonthNavigation,
     habits_list_box: gtk4::Box,
-    detail_stack: gtk4::Stack,
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
-    strength_card_value: gtk4::Label,
+    score_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
@@ -307,13 +328,12 @@ struct SidebarWidgets {
 #[derive(Clone)]
 struct DetailsWidgets {
     page: libadwaita::NavigationPage,
-    detail_stack: gtk4::Stack,
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
-    strength_card_value: gtk4::Label,
+    score_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
@@ -378,12 +398,13 @@ fn handle_select(
     caches: &DrawCaches,
     habit_id: i64,
 ) {
-    {
+    let (nav_view, details_page) = {
         let mut inner = inner_rc.borrow_mut();
         inner.selected_habit_id = Some(habit_id);
-        inner.split_view.set_show_content(true);
-    }
+        (inner.nav_view.clone(), inner.details_page.clone())
+    };
     refresh(inner_rc, caches);
+    nav_view.push(&details_page);
 }
 
 #[cfg(feature = "ui")]
@@ -402,7 +423,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
     }
 
-    // 1. Rebuild left pane list
+    // 1. Rebuild habits list
     while let Some(child) = inner.habits_list_box.first_child() {
         inner.habits_list_box.remove(&child);
     }
@@ -411,7 +432,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         let habit_id = habit.id.unwrap_or(0);
         let start_bound = NaiveDate::MIN;
         let entries = inner.db.borrow().get_entries(habit_id, start_bound, today).unwrap_or_default();
-        let strength = calculate_habit_strength(habit, &entries, today);
+        let score = calculate_habit_score(habit, &entries, today);
 
         let inner_toggle = Rc::clone(inner_rc);
         let caches_toggle = caches.clone();
@@ -425,19 +446,18 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             handle_select(&inner_sel, &caches_sel, hid);
         };
 
-        let row_widget = HabitRowWidget::new(habit, strength, &entries, today, on_toggle, on_select);
+        let row_widget = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select);
         if habit.id == inner.selected_habit_id {
             row_widget.widget().add_css_class("selected");
         }
         inner.habits_list_box.append(row_widget.widget());
     }
 
-    // 2. Update right pane details
+    // 2. Update details
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
             inner.edit_btn.set_visible(true);
             inner.delete_btn.set_visible(true);
-            inner.detail_stack.set_visible_child_name("details");
             inner.title_label.set_text(&selected_habit.name);
 
             let sched_text = format_schedule_summary(selected_habit.scheduled_days);
@@ -449,7 +469,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let all_entries = inner.db.borrow().get_entries(sel_id, start_bound, today).unwrap_or_default();
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
-            inner.strength_card_value.set_text(&metrics.strength_percent);
+            inner.score_card_value.set_text(&metrics.score_percent);
             inner.current_streak_card_value.set_text(&metrics.current_streak_text);
             inner.best_streak_card_value.set_text(&metrics.best_streak_text);
 
@@ -492,7 +512,6 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
 
     inner.edit_btn.set_visible(false);
     inner.delete_btn.set_visible(false);
-    inner.detail_stack.set_visible_child_name("empty");
 }
 
 #[cfg(feature = "ui")]
@@ -538,20 +557,24 @@ fn build_sidebar() -> SidebarWidgets {
     quick_check_header.set_margin_top(8);
     quick_check_header.set_margin_bottom(8);
 
-    let habit_progress_label = gtk4::Label::new(Some("HABIT & PROGRESS"));
-    habit_progress_label.set_halign(gtk4::Align::Start);
-    habit_progress_label.set_hexpand(true);
-    habit_progress_label.add_css_class("dim-label");
-    habit_progress_label.add_css_class("caption");
-    quick_check_header.append(&habit_progress_label);
+    let habit_score_label = gtk4::Label::new(Some("HABIT & SCORE"));
+    habit_score_label.set_halign(gtk4::Align::Start);
+    habit_score_label.set_hexpand(true);
+    habit_score_label.add_css_class("dim-label");
+    habit_score_label.add_css_class("caption");
+    quick_check_header.append(&habit_score_label);
 
     let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     days_header_box.set_halign(gtk4::Align::End);
-    for name in &["Today", "Yest", "-2d", "-3d", "-4d", "-5d", "-6d"] {
-        let lbl = gtk4::Label::new(Some(name));
+    let today = chrono::Local::now().date_naive();
+    let dates = crate::ui::habit_row::calculate_7_day_dates(today);
+    for date in dates {
+        let date_str = date.format("%m/%d").to_string();
+        let lbl = gtk4::Label::new(Some(&date_str));
         lbl.add_css_class("dim-label");
         lbl.add_css_class("caption");
-        lbl.set_width_chars(3);
+        lbl.set_size_request(36, -1);
+        lbl.set_halign(gtk4::Align::Center);
         days_header_box.append(&lbl);
     }
     quick_check_header.append(&days_header_box);
@@ -572,7 +595,7 @@ fn build_sidebar() -> SidebarWidgets {
     sidebar_box.append(&sidebar_scrolled);
 
     let page = libadwaita::NavigationPage::new(&sidebar_box, "Habits");
-    page.set_tag(Some("sidebar"));
+    page.set_tag(Some("habits"));
 
     SidebarWidgets {
         page,
@@ -587,19 +610,19 @@ fn build_metrics_section() -> (gtk4::Box, gtk4::Label, gtk4::Label, gtk4::Label)
     let metrics_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
     metrics_box.set_homogeneous(true);
 
-    let strength_card_value = gtk4::Label::new(Some("0%"));
+    let score_card_value = gtk4::Label::new(Some("0%"));
     let current_streak_card_value = gtk4::Label::new(Some("0d"));
     let best_streak_card_value = gtk4::Label::new(Some("0d"));
 
-    let card_strength = create_metric_card("Strength", &strength_card_value);
+    let card_score = create_metric_card("Score", &score_card_value);
     let card_current = create_metric_card("Current Streak", &current_streak_card_value);
     let card_best = create_metric_card("Best Streak", &best_streak_card_value);
 
-    metrics_box.append(&card_strength);
+    metrics_box.append(&card_score);
     metrics_box.append(&card_current);
     metrics_box.append(&card_best);
 
-    (metrics_box, strength_card_value, current_streak_card_value, best_streak_card_value)
+    (metrics_box, score_card_value, current_streak_card_value, best_streak_card_value)
 }
 
 #[cfg(feature = "ui")]
@@ -659,16 +682,6 @@ fn build_details() -> DetailsWidgets {
 
     content_box.append(&content_header);
 
-    let detail_stack = gtk4::Stack::new();
-    detail_stack.set_vexpand(true);
-
-    let empty_page = libadwaita::StatusPage::builder()
-        .icon_name("view-list-bullet-symbolic")
-        .title("No Habit Selected")
-        .description("Select a habit from the list or create a new one to view analytics.")
-        .build();
-    detail_stack.add_named(&empty_page, Some("empty"));
-
     let details_vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
     details_vbox.set_margin_start(18);
     details_vbox.set_margin_end(18);
@@ -698,14 +711,14 @@ fn build_details() -> DetailsWidgets {
     let sep2 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep2);
 
-    let (metrics_box, strength_card_value, current_streak_card_value, best_streak_card_value) =
+    let (metrics_box, score_card_value, current_streak_card_value, best_streak_card_value) =
         build_metrics_section();
     details_vbox.append(&metrics_box);
 
     let sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep3);
 
-    let curve_header = gtk4::Label::new(Some("Habit Strength Curve (Last 30 Days)"));
+    let curve_header = gtk4::Label::new(Some("Score History (Last 30 Days)"));
     curve_header.add_css_class("heading");
     curve_header.set_halign(gtk4::Align::Start);
     details_vbox.append(&curve_header);
@@ -726,22 +739,19 @@ fn build_details() -> DetailsWidgets {
     let details_scrolled = gtk4::ScrolledWindow::new();
     details_scrolled.set_vexpand(true);
     details_scrolled.set_child(Some(&details_vbox));
-    detail_stack.add_named(&details_scrolled, Some("details"));
-
-    content_box.append(&detail_stack);
+    content_box.append(&details_scrolled);
 
     let page = libadwaita::NavigationPage::new(&content_box, "Details");
     page.set_tag(Some("details"));
 
     DetailsWidgets {
         page,
-        detail_stack,
         title_label,
         subtitle_label,
         color_badge,
         edit_btn,
         delete_btn,
-        strength_card_value,
+        score_card_value,
         current_streak_card_value,
         best_streak_card_value,
         curve_drawing_area,
@@ -818,11 +828,16 @@ fn connect_controllers(
             };
             let create_res = db.borrow().create_habit(&new_habit);
             if let Ok(id) = create_res {
-                let mut inner = inner_saved.borrow_mut();
-                inner.selected_habit_id = Some(id);
-                inner.split_view.set_show_content(true);
+                let (nav_view, details_page) = {
+                    let mut inner = inner_saved.borrow_mut();
+                    inner.selected_habit_id = Some(id);
+                    (inner.nav_view.clone(), inner.details_page.clone())
+                };
+                refresh(&inner_saved, &caches_saved);
+                nav_view.push(&details_page);
+            } else {
+                refresh(&inner_saved, &caches_saved);
             }
-            refresh(&inner_saved, &caches_saved);
         });
     });
 
@@ -899,7 +914,7 @@ fn connect_detail_actions(
                     {
                         let mut inner = inner_cb.borrow_mut();
                         inner.selected_habit_id = None;
-                        inner.split_view.set_show_content(false);
+                        inner.nav_view.pop();
                     }
                     refresh(&inner_cb, &caches_cb);
                 }
@@ -1037,12 +1052,12 @@ fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
     });
 }
 
-/// Main application window providing a 50/50 responsive split view between habits and analytics.
+/// Main application window providing Fast-Check List and push-navigation for details.
 #[cfg(feature = "ui")]
 #[derive(Debug, Clone)]
 pub struct HabitWindow {
     window: libadwaita::ApplicationWindow,
-    split_view: libadwaita::NavigationSplitView,
+    nav_view: libadwaita::NavigationView,
     toast_overlay: libadwaita::ToastOverlay,
 }
 
@@ -1067,33 +1082,21 @@ impl HabitWindow {
         let window = libadwaita::ApplicationWindow::builder()
             .application(app)
             .title("Habits")
-            .default_width(960)
-            .default_height(640)
+            .default_width(520)
+            .default_height(700)
+            .resizable(false)
             .build();
 
-        let split_view = libadwaita::NavigationSplitView::new();
-        split_view.set_sidebar_width_fraction(0.5);
-        split_view.set_min_sidebar_width(360.0);
-        split_view.set_max_sidebar_width(1200.0);
+        let nav_view = libadwaita::NavigationView::new();
 
         let sidebar = build_sidebar();
-        split_view.set_sidebar(Some(&sidebar.page));
+        nav_view.add(&sidebar.page);
 
         let details = build_details();
         let details_clone = details.clone();
-        split_view.set_content(Some(&details.page));
-
-        // Setup Responsive Breakpoint (< 760px collapses to single pane)
-        let breakpoint = libadwaita::Breakpoint::new(libadwaita::BreakpointCondition::new_length(
-            libadwaita::BreakpointConditionLengthType::MaxWidth,
-            760.0,
-            libadwaita::LengthUnit::Px,
-        ));
-        breakpoint.add_setter(&split_view, "collapsed", Some(&true.into()));
-        window.add_breakpoint(breakpoint);
 
         let toast_overlay = libadwaita::ToastOverlay::new();
-        toast_overlay.set_child(Some(&split_view));
+        toast_overlay.set_child(Some(&nav_view));
         window.set_content(Some(&toast_overlay));
 
         let now = chrono::Local::now();
@@ -1111,18 +1114,18 @@ impl HabitWindow {
 
         let db_rc = Rc::new(RefCell::new(db));
         let inner = WindowInner {
-            split_view: split_view.clone(),
+            nav_view: nav_view.clone(),
+            details_page: details.page.clone(),
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
             month_nav: initial_nav,
             habits_list_box: sidebar.habits_list_box,
-            detail_stack: details.detail_stack,
             title_label: details.title_label,
             subtitle_label: details.subtitle_label,
             color_badge: details.color_badge,
             edit_btn: details.edit_btn.clone(),
             delete_btn: details.delete_btn.clone(),
-            strength_card_value: details.strength_card_value,
+            score_card_value: details.score_card_value,
             current_streak_card_value: details.current_streak_card_value,
             best_streak_card_value: details.best_streak_card_value,
             curve_drawing_area: details.curve_drawing_area,
@@ -1155,7 +1158,7 @@ impl HabitWindow {
 
         Self {
             window,
-            split_view,
+            nav_view,
             toast_overlay,
         }
     }
@@ -1166,10 +1169,10 @@ impl HabitWindow {
         &self.window
     }
 
-    /// Returns a reference to the `libadwaita::NavigationSplitView`.
+    /// Returns a reference to the `libadwaita::NavigationView`.
     #[must_use]
-    pub const fn split_view(&self) -> &libadwaita::NavigationSplitView {
-        &self.split_view
+    pub const fn nav_view(&self) -> &libadwaita::NavigationView {
+        &self.nav_view
     }
 
     /// Returns a reference to the `libadwaita::ToastOverlay`.

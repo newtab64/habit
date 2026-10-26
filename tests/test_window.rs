@@ -44,6 +44,12 @@ fn test_month_navigation_rollover_next_and_prev() {
 }
 
 #[test]
+fn test_header_date_formatting() {
+    let d = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+    assert_eq!(d.format("%m/%d").to_string(), "10/27");
+}
+
+#[test]
 fn test_month_navigation_clamping_and_bounds() {
     let clamped_low = MonthNavigation::new(2026, 0);
     assert_eq!(clamped_low.month, 1);
@@ -116,18 +122,24 @@ fn test_toggle_entry_state_binary_and_measurable() {
     let binary = Habit::new_binary("Gym").with_id(1);
     let today = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
 
-    // 1. Unlogged binary -> toggles to Completed (1.0)
+    // 1. Unlogged binary -> cycles to Completed (1.0)
     let (status, val) = toggle_entry_state(&binary, None, None);
     assert_eq!(status, EntryStatus::Completed);
     assert!((val - 1.0).abs() < 1e-6);
 
-    // 2. Completed binary -> toggles to Missed (0.0)
+    // 2. Completed binary -> cycles to Skipped (0.0)
     let comp_entry = HabitEntry::new(1, today, EntryStatus::Completed, 1.0);
     let (status, val) = toggle_entry_state(&binary, Some(&comp_entry), None);
+    assert_eq!(status, EntryStatus::Skipped);
+    assert!((val - 0.0).abs() < 1e-6);
+
+    // 3. Skipped binary -> cycles to Missed (0.0)
+    let skip_entry = HabitEntry::new(1, today, EntryStatus::Skipped, 0.0);
+    let (status, val) = toggle_entry_state(&binary, Some(&skip_entry), None);
     assert_eq!(status, EntryStatus::Missed);
     assert!((val - 0.0).abs() < 1e-6);
 
-    // 3. Missed binary -> toggles to Completed (1.0)
+    // 4. Missed binary -> cycles to Completed (1.0)
     let miss_entry = HabitEntry::new(1, today, EntryStatus::Missed, 0.0);
     let (status, val) = toggle_entry_state(&binary, Some(&miss_entry), None);
     assert_eq!(status, EntryStatus::Completed);
