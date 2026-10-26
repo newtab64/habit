@@ -11,7 +11,7 @@ pub const DEFAULT_HALF_LIFE_DAYS: f64 = 14.0;
 /// Clamps half-life to a positive minimum to avoid division by zero or NaN.
 #[must_use]
 pub fn decay_alpha(half_life_days: f64) -> f64 {
-    let t = if half_life_days <= 0.0 {
+    let t = if half_life_days <= 0.0 || half_life_days.is_nan() {
         DEFAULT_HALF_LIFE_DAYS
     } else {
         half_life_days
@@ -27,12 +27,14 @@ enum DayEvaluation {
 }
 
 fn is_entry_completed(habit: &Habit, entry: &HabitEntry) -> bool {
-    if entry.status == EntryStatus::Skipped {
+    if entry.status == EntryStatus::Skipped || entry.status == EntryStatus::Missed {
         return false;
     }
     match &habit.habit_type {
         HabitType::Binary => entry.status == EntryStatus::Completed,
-        HabitType::Measurable { target, .. } => entry.value >= *target,
+        HabitType::Measurable { target, .. } => {
+            entry.status == EntryStatus::Completed && entry.value >= *target
+        }
     }
 }
 
@@ -273,7 +275,9 @@ pub fn calculate_strength_history(
             DayEvaluation::Neutral => {}
         }
         strength = strength.clamp(0.0, 1.0);
-        strength_by_date.insert(current_date, strength);
+        if current_date >= window_start {
+            strength_by_date.insert(current_date, strength);
+        }
 
         match current_date.succ_opt() {
             Some(next) => current_date = next,
