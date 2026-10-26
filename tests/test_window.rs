@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use habit::engine::models::{
-    EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI,
-    SCHEDULE_MON, SCHEDULE_SAT, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
+    EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON,
+    SCHEDULE_SAT, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 use habit::ui::window::{
     calculate_habit_metrics, format_schedule_summary, format_streak_badge,
@@ -64,8 +64,14 @@ fn test_month_navigation_clamping_and_bounds() {
 fn test_schedule_and_metrics_formatting() {
     // Schedule formatting
     assert_eq!(format_schedule_summary(SCHEDULE_ALL_DAYS), "Daily");
-    assert_eq!(format_schedule_summary(SCHEDULE_WORKDAYS), "Weekdays (Mon-Fri)");
-    assert_eq!(format_schedule_summary(SCHEDULE_WEEKENDS), "Weekends (Sat-Sun)");
+    assert_eq!(
+        format_schedule_summary(SCHEDULE_WORKDAYS),
+        "Weekdays (Mon-Fri)"
+    );
+    assert_eq!(
+        format_schedule_summary(SCHEDULE_WEEKENDS),
+        "Weekends (Sat-Sun)"
+    );
 
     let gym_mask = SCHEDULE_MON | SCHEDULE_WED | SCHEDULE_FRI | SCHEDULE_SAT;
     assert_eq!(format_schedule_summary(gym_mask), "Mon, Wed, Fri, Sat");
@@ -93,18 +99,28 @@ fn test_schedule_and_metrics_formatting() {
 
 #[test]
 fn test_calculate_habit_metrics_from_entries() {
-    let habit = Habit::new(
-        "Workout",
-        HabitType::Binary,
-        SCHEDULE_ALL_DAYS,
-        "#FF7800",
-    ).with_id(1);
+    let habit = Habit::new("Workout", HabitType::Binary, SCHEDULE_ALL_DAYS, "#FF7800").with_id(1);
 
     let today = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
     let entries = vec![
-        HabitEntry::new(1, today - chrono::Duration::days(3), EntryStatus::Completed, 1.0),
-        HabitEntry::new(1, today - chrono::Duration::days(2), EntryStatus::Completed, 1.0),
-        HabitEntry::new(1, today - chrono::Duration::days(1), EntryStatus::Completed, 1.0),
+        HabitEntry::new(
+            1,
+            today - chrono::Duration::days(3),
+            EntryStatus::Completed,
+            1.0,
+        ),
+        HabitEntry::new(
+            1,
+            today - chrono::Duration::days(2),
+            EntryStatus::Completed,
+            1.0,
+        ),
+        HabitEntry::new(
+            1,
+            today - chrono::Duration::days(1),
+            EntryStatus::Completed,
+            1.0,
+        ),
         HabitEntry::new(1, today, EntryStatus::Completed, 1.0),
     ];
 

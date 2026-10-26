@@ -2,9 +2,7 @@ use std::fmt;
 #[cfg(feature = "ui")]
 use std::fmt::Write;
 
-use crate::engine::models::{
-    normalize_hex_color, ColorError, Habit, HabitType,
-};
+use crate::engine::models::{normalize_hex_color, ColorError, Habit, HabitType};
 
 #[cfg(feature = "ui")]
 use gtk4::prelude::*;
@@ -123,7 +121,8 @@ fn build_general_group(
     }
     group.add(&name_row);
 
-    let type_model = gtk4::StringList::new(&["Binary (Done / Not Done)", "Measurable (Numerical Goal)"]);
+    let type_model =
+        gtk4::StringList::new(&["Binary (Done / Not Done)", "Measurable (Numerical Goal)"]);
     let type_row = libadwaita::ComboRow::new();
     type_row.set_title("Habit Type");
     type_row.set_model(Some(&type_model));
@@ -212,14 +211,20 @@ fn build_schedule_group(
         switch_rows.push((bit, switch));
     }
 
-    let switches_for_all = switch_rows.iter().map(|(_, s)| s.clone()).collect::<Vec<_>>();
+    let switches_for_all = switch_rows
+        .iter()
+        .map(|(_, s)| s.clone())
+        .collect::<Vec<_>>();
     all_days_btn.connect_clicked(move |_| {
         for s in &switches_for_all {
             s.set_active(true);
         }
     });
 
-    let switches_for_work = switch_rows.iter().map(|(b, s)| (*b, s.clone())).collect::<Vec<_>>();
+    let switches_for_work = switch_rows
+        .iter()
+        .map(|(b, s)| (*b, s.clone()))
+        .collect::<Vec<_>>();
     weekdays_btn.connect_clicked(move |_| {
         for (b, s) in &switches_for_work {
             let is_workday = (*b & SCHEDULE_WORKDAYS) != 0;
@@ -227,7 +232,10 @@ fn build_schedule_group(
         }
     });
 
-    let switches_for_weekends = switch_rows.iter().map(|(b, s)| (*b, s.clone())).collect::<Vec<_>>();
+    let switches_for_weekends = switch_rows
+        .iter()
+        .map(|(b, s)| (*b, s.clone()))
+        .collect::<Vec<_>>();
     weekends_btn.connect_clicked(move |_| {
         for (b, s) in &switches_for_weekends {
             let is_weekend = (*b & SCHEDULE_WEEKENDS) != 0;
@@ -239,12 +247,7 @@ fn build_schedule_group(
 }
 
 #[cfg(feature = "ui")]
-fn build_color_group(
-    initial_color: &str,
-) -> (
-    libadwaita::PreferencesGroup,
-    libadwaita::EntryRow,
-) {
+fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, libadwaita::EntryRow) {
     let group = libadwaita::PreferencesGroup::new();
     group.set_title("Accent Color");
 

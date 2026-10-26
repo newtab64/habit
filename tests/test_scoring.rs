@@ -23,7 +23,7 @@ fn test_asymmetric_scoring_harder_to_gain() {
 #[test]
 fn test_predefined_rest_days_do_not_decay_or_break_streak() {
     let gym = Habit::new_gym_example(); // Mon, Wed, Fri, Sat
-    // Mon: Done, Tue: Pre-defined Rest, Wed: Done
+                                        // Mon: Done, Tue: Pre-defined Rest, Wed: Done
     let d1 = NaiveDate::from_ymd_opt(2026, 10, 19).unwrap(); // Mon
     let d2 = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap(); // Tue (rest)
     let d3 = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap(); // Wed
@@ -379,4 +379,3 @@ fn test_entries_after_as_of_are_ignored() {
     let s3 = calculate_habit_strength(&habit, &entries, d3);
     assert!(s3 > s2);
 }
-

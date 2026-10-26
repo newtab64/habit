@@ -40,7 +40,8 @@ fn test_desktop_and_metainfo_present() {
         .expect("data/io.github.habit.Habit.metainfo.xml should exist");
     assert!(metainfo.contains("<id>io.github.habit.Habit</id>"));
 
-    let icon_path = std::path::Path::new("data/icons/hicolor/scalable/apps/io.github.habit.Habit.svg");
+    let icon_path =
+        std::path::Path::new("data/icons/hicolor/scalable/apps/io.github.habit.Habit.svg");
     assert!(icon_path.exists(), "SVG icon must exist");
     let icon_content = std::fs::read_to_string(icon_path).expect("SVG icon must be readable");
     assert!(icon_content.contains("<svg"), "Must be a valid SVG");

@@ -20,14 +20,20 @@ fn test_in_memory_creation_and_habit_crud() {
     assert!(id2 > id1);
 
     // 3. Get single habit
-    let fetched1 = db.get_habit(id1).expect("get_habit failed").expect("habit not found");
+    let fetched1 = db
+        .get_habit(id1)
+        .expect("get_habit failed")
+        .expect("habit not found");
     assert_eq!(fetched1.id, Some(id1));
     assert_eq!(fetched1.name, "Morning Meditation");
     assert_eq!(fetched1.habit_type, HabitType::Binary);
     assert_eq!(fetched1.accent_color, "#33D17A");
     assert!(!fetched1.archived);
 
-    let fetched2 = db.get_habit(id2).expect("get_habit failed").expect("habit not found");
+    let fetched2 = db
+        .get_habit(id2)
+        .expect("get_habit failed")
+        .expect("habit not found");
     assert_eq!(fetched2.id, Some(id2));
     assert_eq!(fetched2.name, "Read Book");
     assert_eq!(
@@ -88,7 +94,10 @@ fn test_atomic_entry_logging_and_queries() {
         .expect("log entry failed");
 
     // Single entry query
-    let entry1 = db.get_entry(id, day1).expect("query failed").expect("entry missing");
+    let entry1 = db
+        .get_entry(id, day1)
+        .expect("query failed")
+        .expect("entry missing");
     assert_eq!(entry1.habit_id, id);
     assert_eq!(entry1.date, day1);
     assert_eq!(entry1.status, EntryStatus::Completed);
@@ -130,12 +139,16 @@ fn test_foreign_key_constraints_and_cascade() {
     let id = db.create_habit(&habit).expect("failed to create habit");
 
     let today = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-    db.log_entry(id, today, EntryStatus::Completed, 1.0).unwrap();
+    db.log_entry(id, today, EntryStatus::Completed, 1.0)
+        .unwrap();
 
     // Verify foreign key violation on non-existent habit
     let bad_id = 999_999;
     let fk_err = db.log_entry(bad_id, today, EntryStatus::Completed, 1.0);
-    assert!(fk_err.is_err(), "logging entry for missing habit should fail FK check");
+    assert!(
+        fk_err.is_err(),
+        "logging entry for missing habit should fail FK check"
+    );
 
     // Verify cascade deletion
     db.delete_habit(id).expect("delete habit failed");
@@ -153,7 +166,8 @@ fn test_on_disk_wal_mode_and_persistence() {
         let db = Database::open(&db_path).expect("open on-disk db failed");
         let id = db.create_habit(&Habit::new_binary("Drink Water")).unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-        db.log_entry(id, today, EntryStatus::Completed, 1.0).unwrap();
+        db.log_entry(id, today, EntryStatus::Completed, 1.0)
+            .unwrap();
     }
 
     // Reopen database from same file
@@ -185,18 +199,22 @@ fn test_backup_export_and_restore() {
     let id2 = db1.create_habit(&habit2).unwrap();
 
     let day = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-    db1.log_entry(id1, day, EntryStatus::Completed, 1.0).unwrap();
-    db1.log_entry(id2, day, EntryStatus::Completed, 50.0).unwrap();
+    db1.log_entry(id1, day, EntryStatus::Completed, 1.0)
+        .unwrap();
+    db1.log_entry(id2, day, EntryStatus::Completed, 50.0)
+        .unwrap();
 
     // Export atomic backup
-    db1.export_backup(&backup_path).expect("export backup failed");
+    db1.export_backup(&backup_path)
+        .expect("export backup failed");
     assert!(backup_path.exists());
 
     // Restore into a fresh in-memory database
     let mut db2 = Database::open_in_memory().expect("open db2 failed");
     assert_eq!(db2.get_habits().unwrap().len(), 0);
 
-    db2.restore_backup(&backup_path).expect("restore backup failed");
+    db2.restore_backup(&backup_path)
+        .expect("restore backup failed");
 
     let restored_habits = db2.get_habits().unwrap();
     assert_eq!(restored_habits.len(), 2);

@@ -1,5 +1,5 @@
-use chrono::{Datelike, NaiveDate};
 use crate::engine::models::{EntryStatus, Habit, HabitEntry, HabitType};
+use chrono::{Datelike, NaiveDate};
 
 #[cfg(feature = "ui")]
 use gtk4::prelude::*;
@@ -22,12 +22,24 @@ pub struct DaySymbolDisplay {
 #[must_use]
 pub fn calculate_7_day_dates(today: NaiveDate) -> [NaiveDate; 7] {
     [
-        today.checked_sub_signed(chrono::Duration::days(6)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(5)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(4)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(3)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(2)).unwrap_or(today),
-        today.checked_sub_signed(chrono::Duration::days(1)).unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(6))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(5))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(4))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(3))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(2))
+            .unwrap_or(today),
+        today
+            .checked_sub_signed(chrono::Duration::days(1))
+            .unwrap_or(today),
         today,
     ]
 }
@@ -182,12 +194,16 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
 pub struct HabitRowWidget {
     /// The root horizontal box containing title, progress, and 7-day checklist.
     pub container: gtk4::Box,
+    /// Left box containing title and progress bar.
+    pub left_box: gtk4::Box,
     /// The habit title label.
     pub title_label: gtk4::Label,
-    /// Slim 5px progress bar indicating current habit strength.
+    /// Slim 5px progress bar indicating current habit score.
     pub progress_bar: gtk4::ProgressBar,
     /// Horizontal box containing the 7 day bare symbol action buttons.
     pub days_box: gtk4::Box,
+    /// The 7 day action buttons in chronological order.
+    pub day_buttons: Vec<gtk4::Button>,
 }
 
 #[cfg(feature = "ui")]
@@ -326,6 +342,7 @@ impl HabitRowWidget {
 
         let dates = calculate_7_day_dates(today);
         let is_measurable = habit.habit_type.is_measurable();
+        let mut day_buttons = Vec::with_capacity(7);
 
         for date in dates {
             let entry = entries.iter().find(|e| e.date == date);
@@ -370,6 +387,7 @@ impl HabitRowWidget {
                 day_btn.add_controller(right_click);
             }
 
+            day_buttons.push(day_btn.clone());
             days_box.append(&day_btn);
         }
 
@@ -377,9 +395,11 @@ impl HabitRowWidget {
 
         Self {
             container,
+            left_box,
             title_label,
             progress_bar,
             days_box,
+            day_buttons,
         }
     }
 

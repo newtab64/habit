@@ -1,8 +1,8 @@
 use chrono::{NaiveDate, Weekday};
 use habit::engine::models::{
-    is_valid_hex_color, normalize_hex_color, ColorError, EntryStatus, Habit, HabitEntry,
-    HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON, SCHEDULE_SAT, SCHEDULE_SUN,
-    SCHEDULE_THU, SCHEDULE_TUE, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
+    is_valid_hex_color, normalize_hex_color, ColorError, EntryStatus, Habit, HabitEntry, HabitType,
+    SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON, SCHEDULE_SAT, SCHEDULE_SUN, SCHEDULE_THU,
+    SCHEDULE_TUE, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 
 #[test]

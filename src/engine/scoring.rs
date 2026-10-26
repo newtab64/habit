@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use chrono::{Datelike, NaiveDate};
 use crate::engine::models::{EntryStatus, Habit, HabitEntry, HabitType};
+use chrono::{Datelike, NaiveDate};
+use std::collections::HashMap;
 
 /// Default half-life in days for exponential habit strength decay ($T_{1/2} = 14.0$).
 pub const DEFAULT_HALF_LIFE_DAYS: f64 = 14.0;
@@ -121,11 +121,7 @@ fn get_start_date(habit: &Habit, entry_map: &HashMap<NaiveDate, &HabitEntry>) ->
 /// The calculation starts from habit creation date or earliest entry date up to `as_of`.
 /// If `as_of` has no entry yet, it is treated neutrally (evaluated up to yesterday / preserved).
 #[must_use]
-pub fn calculate_habit_score(
-    habit: &Habit,
-    entries: &[HabitEntry],
-    as_of: NaiveDate,
-) -> f64 {
+pub fn calculate_habit_score(habit: &Habit, entries: &[HabitEntry], as_of: NaiveDate) -> f64 {
     let entry_map = build_entry_map(habit, entries);
     if entry_map.is_empty() {
         return 0.0;
@@ -170,11 +166,7 @@ pub fn calculate_habit_score(
 
 /// Backwards-compatibility alias for `calculate_habit_score`.
 #[must_use]
-pub fn calculate_habit_strength(
-    habit: &Habit,
-    entries: &[HabitEntry],
-    as_of: NaiveDate,
-) -> f64 {
+pub fn calculate_habit_strength(habit: &Habit, entries: &[HabitEntry], as_of: NaiveDate) -> f64 {
     calculate_habit_score(habit, entries, as_of)
 }
 
@@ -189,11 +181,7 @@ pub fn calculate_habit_strength(
 /// If `as_of` is an active scheduled day with no entry yet, the current streak is preserved
 /// from the previous active scheduled day (pending user action today).
 #[must_use]
-pub fn calculate_streaks(
-    habit: &Habit,
-    entries: &[HabitEntry],
-    as_of: NaiveDate,
-) -> (u32, u32) {
+pub fn calculate_streaks(habit: &Habit, entries: &[HabitEntry], as_of: NaiveDate) -> (u32, u32) {
     let entry_map = build_entry_map(habit, entries);
     if entry_map.is_empty() {
         return (0, 0);

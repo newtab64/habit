@@ -9,7 +9,10 @@ fn test_default_backup_filename() {
     assert_eq!(default_backup_filename(date), "habit-backup-2026-10-26.db");
 
     let new_year = NaiveDate::from_ymd_opt(2027, 1, 1).unwrap();
-    assert_eq!(default_backup_filename(new_year), "habit-backup-2027-01-01.db");
+    assert_eq!(
+        default_backup_filename(new_year),
+        "habit-backup-2027-01-01.db"
+    );
 }
 
 #[test]
@@ -25,18 +28,26 @@ fn test_backup_export_and_atomic_restore() {
     let id2 = db_src.create_habit(&habit2).unwrap();
 
     let today = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
-    db_src.log_entry(id1, today, EntryStatus::Completed, 1.0).unwrap();
-    db_src.log_entry(id2, today, EntryStatus::Completed, 25.0).unwrap();
+    db_src
+        .log_entry(id1, today, EntryStatus::Completed, 1.0)
+        .unwrap();
+    db_src
+        .log_entry(id2, today, EntryStatus::Completed, 25.0)
+        .unwrap();
 
     // Export backup to disk
-    db_src.export_backup(&backup_path).expect("export backup should succeed");
+    db_src
+        .export_backup(&backup_path)
+        .expect("export backup should succeed");
     assert!(backup_path.exists());
 
     // Restore into empty target DB
     let mut db_dst = Database::open_in_memory().expect("open target db");
     assert_eq!(db_dst.get_habits().unwrap().len(), 0);
 
-    db_dst.restore_backup(&backup_path).expect("restore backup should succeed");
+    db_dst
+        .restore_backup(&backup_path)
+        .expect("restore backup should succeed");
 
     let restored = db_dst.get_habits().unwrap();
     assert_eq!(restored.len(), 2);
@@ -76,7 +87,8 @@ fn test_restore_rejects_missing_tables() {
 
     {
         let conn = rusqlite::Connection::open(&invalid_schema_file).unwrap();
-        conn.execute("CREATE TABLE dummy (id INTEGER PRIMARY KEY);", []).unwrap();
+        conn.execute("CREATE TABLE dummy (id INTEGER PRIMARY KEY);", [])
+            .unwrap();
     }
 
     let mut db = Database::open_in_memory().expect("open in-memory db");
@@ -106,7 +118,8 @@ fn test_restore_rejects_nonexistent_file() {
 
 #[test]
 fn test_backup_export_overwrites_existing_file() {
-    let temp_dir = std::env::temp_dir().join(format!("portal_test_overwrite_{}", std::process::id()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("portal_test_overwrite_{}", std::process::id()));
     std::fs::create_dir_all(&temp_dir).unwrap();
     let backup_path = temp_dir.join("existing.db");
 
@@ -118,11 +131,15 @@ fn test_backup_export_overwrites_existing_file() {
     db_src.create_habit(&habit).unwrap();
 
     // Export over existing file
-    db_src.export_backup(&backup_path).expect("export backup should succeed over existing file");
+    db_src
+        .export_backup(&backup_path)
+        .expect("export backup should succeed over existing file");
     assert!(backup_path.exists());
 
     let mut db_dst = Database::open_in_memory().expect("open dst db");
-    db_dst.restore_backup(&backup_path).expect("restore from overwritten file should succeed");
+    db_dst
+        .restore_backup(&backup_path)
+        .expect("restore from overwritten file should succeed");
     let habits = db_dst.get_habits().unwrap();
     assert_eq!(habits.len(), 1);
     assert_eq!(habits[0].name, "Journaling");

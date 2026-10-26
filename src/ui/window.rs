@@ -27,9 +27,7 @@ use crate::engine::db::Database;
 #[cfg(feature = "ui")]
 use crate::engine::scoring::calculate_strength_history;
 #[cfg(feature = "ui")]
-use crate::ui::charts::{
-    days_in_month, draw_monthly_heatmap, draw_strength_curve, heatmap_hit_test, Rgba,
-};
+use crate::ui::charts::{draw_loop_heatmap, draw_strength_curve, loop_heatmap_hit_test, Rgba};
 #[cfg(feature = "ui")]
 use crate::ui::habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
@@ -290,9 +288,10 @@ pub fn toggle_entry_state(
 struct DrawCaches {
     curve_data: Rc<RefCell<Vec<f64>>>,
     curve_color: Rc<RefCell<Rgba>>,
-    month_nav: Rc<RefCell<MonthNavigation>>,
     heatmap_entries: Rc<RefCell<HashMap<NaiveDate, EntryStatus>>>,
     heatmap_color: Rc<RefCell<Rgba>>,
+    heatmap_week_offset: Rc<RefCell<usize>>,
+    heatmap_today: Rc<RefCell<NaiveDate>>,
 }
 
 #[cfg(feature = "ui")]
@@ -301,8 +300,10 @@ struct WindowInner {
     details_page: libadwaita::NavigationPage,
     db: Rc<RefCell<Database>>,
     selected_habit_id: Option<i64>,
-    month_nav: MonthNavigation,
+    heatmap_week_offset: usize,
     habits_list_box: gtk4::Box,
+    habit_score_label: gtk4::Label,
+    header_day_labels: Vec<gtk4::Label>,
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
@@ -312,7 +313,8 @@ struct WindowInner {
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
-    month_title_label: gtk4::Label,
+    today_week_btn: gtk4::Button,
+    next_week_btn: gtk4::Button,
     heatmap_drawing_area: gtk4::DrawingArea,
 }
 
@@ -320,6 +322,8 @@ struct WindowInner {
 struct SidebarWidgets {
     page: libadwaita::NavigationPage,
     habits_list_box: gtk4::Box,
+    habit_score_label: gtk4::Label,
+    header_day_labels: Vec<gtk4::Label>,
     add_btn: gtk4::Button,
     menu_btn: gtk4::MenuButton,
 }
@@ -337,9 +341,9 @@ struct DetailsWidgets {
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
-    month_title_label: gtk4::Label,
-    prev_month_btn: gtk4::Button,
-    next_month_btn: gtk4::Button,
+    prev_week_btn: gtk4::Button,
+    today_week_btn: gtk4::Button,
+    next_week_btn: gtk4::Button,
     heatmap_drawing_area: gtk4::DrawingArea,
 }
 
@@ -393,16 +397,16 @@ fn handle_toggle(
 }
 
 #[cfg(feature = "ui")]
-fn handle_select(
-    inner_rc: &Rc<RefCell<WindowInner>>,
-    caches: &DrawCaches,
-    habit_id: i64,
-) {
+fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, habit_id: i64) {
     let (nav_view, details_page, should_push) = {
         let mut inner = inner_rc.borrow_mut();
         inner.selected_habit_id = Some(habit_id);
         let should_push = inner.nav_view.find_page("details").is_none();
-        (inner.nav_view.clone(), inner.details_page.clone(), should_push)
+        (
+            inner.nav_view.clone(),
+            inner.details_page.clone(),
+            should_push,
+        )
     };
     refresh(inner_rc, caches);
     if should_push {
@@ -411,6 +415,7 @@ fn handle_select(
 }
 
 #[cfg(feature = "ui")]
+#[allow(clippy::too_many_lines, clippy::cast_possible_wrap)]
 fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     let today = chrono::Local::now().date_naive();
     let mut inner = inner_rc.borrow_mut();
@@ -426,6 +431,27 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
     }
 
+    // 0. Update header date labels
+    let dates = crate::ui::habit_row::calculate_7_day_dates(today);
+    for (i, d) in dates.iter().enumerate() {
+        if let Some(lbl) = inner.header_day_labels.get(i) {
+            lbl.set_text(&d.format("%m/%d").to_string());
+        }
+    }
+
+    let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
+    left_group.add_widget(&inner.habit_score_label);
+
+    let col_groups: Vec<gtk4::SizeGroup> = (0..7)
+        .map(|i| {
+            let sg = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
+            if let Some(lbl) = inner.header_day_labels.get(i) {
+                sg.add_widget(lbl);
+            }
+            sg
+        })
+        .collect();
+
     // 1. Rebuild habits list
     while let Some(child) = inner.habits_list_box.first_child() {
         inner.habits_list_box.remove(&child);
@@ -434,7 +460,11 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     for habit in &habits {
         let habit_id = habit.id.unwrap_or(0);
         let start_bound = NaiveDate::MIN;
-        let entries = inner.db.borrow().get_entries(habit_id, start_bound, today).unwrap_or_default();
+        let entries = inner
+            .db
+            .borrow()
+            .get_entries(habit_id, start_bound, today)
+            .unwrap_or_default();
         let score = calculate_habit_score(habit, &entries, today);
 
         let inner_toggle = Rc::clone(inner_rc);
@@ -450,6 +480,12 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         };
 
         let row_widget = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select);
+        left_group.add_widget(&row_widget.left_box);
+        for (i, btn) in row_widget.day_buttons.iter().enumerate() {
+            if let Some(sg) = col_groups.get(i) {
+                sg.add_widget(btn);
+            }
+        }
         if habit.id == inner.selected_habit_id {
             row_widget.widget().add_css_class("selected");
         }
@@ -465,16 +501,26 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
 
             let sched_text = format_schedule_summary(selected_habit.scheduled_days);
             let target_text = format_target_summary(selected_habit);
-            inner.subtitle_label.set_text(&format!("Schedule: {sched_text} • Target: {target_text}"));
+            inner
+                .subtitle_label
+                .set_text(&format!("Schedule: {sched_text} • Target: {target_text}"));
             inner.color_badge.set_text(&selected_habit.accent_color);
 
             let start_bound = NaiveDate::MIN;
-            let all_entries = inner.db.borrow().get_entries(sel_id, start_bound, today).unwrap_or_default();
+            let all_entries = inner
+                .db
+                .borrow()
+                .get_entries(sel_id, start_bound, today)
+                .unwrap_or_default();
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
             inner.score_card_value.set_text(&metrics.score_percent);
-            inner.current_streak_card_value.set_text(&metrics.current_streak_text);
-            inner.best_streak_card_value.set_text(&metrics.best_streak_text);
+            inner
+                .current_streak_card_value
+                .set_text(&metrics.current_streak_text);
+            inner
+                .best_streak_card_value
+                .set_text(&metrics.best_streak_text);
 
             let curve_pts = calculate_strength_history(selected_habit, &all_entries, 30, today);
             let rgba = Rgba::from_hex(&selected_habit.accent_color)
@@ -484,30 +530,39 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             *caches.curve_color.borrow_mut() = rgba;
             inner.curve_drawing_area.queue_draw();
 
-            // Monthly heatmap data
-            inner.month_title_label.set_text(&inner.month_nav.format_title());
-            let days = days_in_month(inner.month_nav.year, inner.month_nav.month);
-            let m_from = NaiveDate::from_ymd_opt(inner.month_nav.year, inner.month_nav.month, 1)
-                .unwrap_or(today);
-            let m_to = NaiveDate::from_ymd_opt(inner.month_nav.year, inner.month_nav.month, days)
-                .unwrap_or(today);
-            let m_entries = inner.db.borrow().get_entries(sel_id, m_from, m_to).unwrap_or_default();
+            // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
+            inner
+                .next_week_btn
+                .set_sensitive(inner.heatmap_week_offset > 0);
+            inner
+                .today_week_btn
+                .set_sensitive(inner.heatmap_week_offset > 0);
 
-            let mut map = HashMap::with_capacity(m_entries.len() + usize::try_from(days).unwrap_or(0));
-            for e in m_entries {
+            let weeks_back = (inner.heatmap_week_offset + 32) as i64;
+            let heatmap_start = today - chrono::Duration::weeks(weeks_back);
+            let h_entries = inner
+                .db
+                .borrow()
+                .get_entries(sel_id, heatmap_start, today)
+                .unwrap_or_default();
+
+            let mut map = HashMap::with_capacity(h_entries.len() + 100);
+            for e in h_entries {
                 map.insert(e.date, e.status);
             }
-            for d in 1..=days {
-                if let Some(date) = NaiveDate::from_ymd_opt(inner.month_nav.year, inner.month_nav.month, d) {
-                    if !map.contains_key(&date) && date <= today && !selected_habit.is_scheduled_on(date.weekday()) {
-                        map.insert(date, EntryStatus::Skipped);
-                    }
+
+            let mut cur = heatmap_start;
+            while cur <= today {
+                if !map.contains_key(&cur) && !selected_habit.is_scheduled_on(cur.weekday()) {
+                    map.insert(cur, EntryStatus::Skipped);
                 }
+                cur += chrono::Duration::days(1);
             }
 
             *caches.heatmap_entries.borrow_mut() = map;
             *caches.heatmap_color.borrow_mut() = rgba;
-            *caches.month_nav.borrow_mut() = inner.month_nav;
+            *caches.heatmap_week_offset.borrow_mut() = inner.heatmap_week_offset;
+            *caches.heatmap_today.borrow_mut() = today;
             inner.heatmap_drawing_area.queue_draw();
             return;
         }
@@ -553,6 +608,11 @@ fn build_sidebar() -> SidebarWidgets {
 
     sidebar_box.append(&sidebar_header);
 
+    let sidebar_scrolled = gtk4::ScrolledWindow::new();
+    sidebar_scrolled.set_vexpand(true);
+
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+
     // Quick-check column headers
     let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     quick_check_header.set_margin_start(12);
@@ -571,6 +631,7 @@ fn build_sidebar() -> SidebarWidgets {
     days_header_box.set_halign(gtk4::Align::End);
     let today = chrono::Local::now().date_naive();
     let dates = crate::ui::habit_row::calculate_7_day_dates(today);
+    let mut header_day_labels = Vec::with_capacity(7);
     for date in dates {
         let date_str = date.format("%m/%d").to_string();
         let lbl = gtk4::Label::new(Some(&date_str));
@@ -579,22 +640,22 @@ fn build_sidebar() -> SidebarWidgets {
         lbl.set_size_request(36, -1);
         lbl.set_halign(gtk4::Align::Center);
         days_header_box.append(&lbl);
+        header_day_labels.push(lbl);
     }
     quick_check_header.append(&days_header_box);
-    sidebar_box.append(&quick_check_header);
+    content_box.append(&quick_check_header);
 
     let sep1 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    sidebar_box.append(&sep1);
+    content_box.append(&sep1);
 
     let habits_list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     habits_list_box.set_margin_start(12);
     habits_list_box.set_margin_end(12);
     habits_list_box.set_margin_top(8);
     habits_list_box.set_margin_bottom(8);
+    content_box.append(&habits_list_box);
 
-    let sidebar_scrolled = gtk4::ScrolledWindow::new();
-    sidebar_scrolled.set_vexpand(true);
-    sidebar_scrolled.set_child(Some(&habits_list_box));
+    sidebar_scrolled.set_child(Some(&content_box));
     sidebar_box.append(&sidebar_scrolled);
 
     let page = libadwaita::NavigationPage::new(&sidebar_box, "Habits");
@@ -603,6 +664,8 @@ fn build_sidebar() -> SidebarWidgets {
     SidebarWidgets {
         page,
         habits_list_box,
+        habit_score_label,
+        header_day_labels,
         add_btn,
         menu_btn,
     }
@@ -625,11 +688,22 @@ fn build_metrics_section() -> (gtk4::Box, gtk4::Label, gtk4::Label, gtk4::Label)
     metrics_box.append(&card_current);
     metrics_box.append(&card_best);
 
-    (metrics_box, score_card_value, current_streak_card_value, best_streak_card_value)
+    (
+        metrics_box,
+        score_card_value,
+        current_streak_card_value,
+        best_streak_card_value,
+    )
 }
 
 #[cfg(feature = "ui")]
-fn build_heatmap_section() -> (gtk4::Box, gtk4::Label, gtk4::Button, gtk4::Button, gtk4::DrawingArea) {
+fn build_heatmap_section() -> (
+    gtk4::Box,
+    gtk4::Button,
+    gtk4::Button,
+    gtk4::Button,
+    gtk4::DrawingArea,
+) {
     let heatmap_nav_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     heatmap_nav_box.set_margin_top(4);
     heatmap_nav_box.set_margin_bottom(4);
@@ -640,21 +714,20 @@ fn build_heatmap_section() -> (gtk4::Box, gtk4::Label, gtk4::Button, gtk4::Butto
     heatmap_title.set_hexpand(true);
     heatmap_nav_box.append(&heatmap_title);
 
-    let month_title_label = gtk4::Label::new(None);
-    month_title_label.add_css_class("heading");
-    month_title_label.set_halign(gtk4::Align::Center);
-    heatmap_nav_box.append(&month_title_label);
-
-    let nav_buttons = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    let nav_buttons = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     nav_buttons.add_css_class("linked");
 
-    let prev_month_btn = gtk4::Button::from_icon_name("go-previous-symbolic");
-    prev_month_btn.set_tooltip_text(Some("Previous Month"));
-    nav_buttons.append(&prev_month_btn);
+    let prev_week_btn = gtk4::Button::from_icon_name("go-previous-symbolic");
+    prev_week_btn.set_tooltip_text(Some("Older Weeks"));
+    nav_buttons.append(&prev_week_btn);
 
-    let next_month_btn = gtk4::Button::from_icon_name("go-next-symbolic");
-    next_month_btn.set_tooltip_text(Some("Next Month"));
-    nav_buttons.append(&next_month_btn);
+    let today_week_btn = gtk4::Button::with_label("Today");
+    today_week_btn.set_tooltip_text(Some("Jump to Current"));
+    nav_buttons.append(&today_week_btn);
+
+    let next_week_btn = gtk4::Button::from_icon_name("go-next-symbolic");
+    next_week_btn.set_tooltip_text(Some("Newer Weeks"));
+    nav_buttons.append(&next_week_btn);
 
     heatmap_nav_box.append(&nav_buttons);
 
@@ -662,7 +735,13 @@ fn build_heatmap_section() -> (gtk4::Box, gtk4::Label, gtk4::Button, gtk4::Butto
     heatmap_drawing_area.set_content_height(160);
     heatmap_drawing_area.set_hexpand(true);
 
-    (heatmap_nav_box, month_title_label, prev_month_btn, next_month_btn, heatmap_drawing_area)
+    (
+        heatmap_nav_box,
+        prev_week_btn,
+        today_week_btn,
+        next_week_btn,
+        heatmap_drawing_area,
+    )
 }
 
 #[cfg(feature = "ui")]
@@ -734,7 +813,7 @@ fn build_details() -> DetailsWidgets {
     let sep4 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep4);
 
-    let (heatmap_nav_box, month_title_label, prev_month_btn, next_month_btn, heatmap_drawing_area) =
+    let (heatmap_nav_box, prev_week_btn, today_week_btn, next_week_btn, heatmap_drawing_area) =
         build_heatmap_section();
     details_vbox.append(&heatmap_nav_box);
     details_vbox.append(&heatmap_drawing_area);
@@ -758,9 +837,9 @@ fn build_details() -> DetailsWidgets {
         current_streak_card_value,
         best_streak_card_value,
         curve_drawing_area,
-        month_title_label,
-        prev_month_btn,
-        next_month_btn,
+        prev_week_btn,
+        today_week_btn,
+        next_week_btn,
         heatmap_drawing_area,
     }
 }
@@ -775,20 +854,30 @@ fn connect_controllers(
 ) {
     let inner_prev = Rc::clone(inner_rc);
     let caches_prev = caches.clone();
-    details.prev_month_btn.connect_clicked(move |_| {
+    details.prev_week_btn.connect_clicked(move |_| {
         {
             let mut inner = inner_prev.borrow_mut();
-            inner.month_nav = inner.month_nav.prev();
+            inner.heatmap_week_offset += 12;
         }
         refresh(&inner_prev, &caches_prev);
     });
 
+    let inner_today_btn = Rc::clone(inner_rc);
+    let caches_today_btn = caches.clone();
+    details.today_week_btn.connect_clicked(move |_| {
+        {
+            let mut inner = inner_today_btn.borrow_mut();
+            inner.heatmap_week_offset = 0;
+        }
+        refresh(&inner_today_btn, &caches_today_btn);
+    });
+
     let inner_next = Rc::clone(inner_rc);
     let caches_next = caches.clone();
-    details.next_month_btn.connect_clicked(move |_| {
+    details.next_week_btn.connect_clicked(move |_| {
         {
             let mut inner = inner_next.borrow_mut();
-            inner.month_nav = inner.month_nav.next();
+            inner.heatmap_week_offset = inner.heatmap_week_offset.saturating_sub(12);
         }
         refresh(&inner_next, &caches_next);
     });
@@ -803,15 +892,23 @@ fn connect_controllers(
         };
         let width = f64::from(area.width());
         let height = f64::from(area.height());
-        let (year, month, selected_id) = {
+        let (selected_id, week_offset) = {
             let inner = inner_gesture.borrow();
-            (inner.month_nav.year, inner.month_nav.month, inner.selected_habit_id)
+            (inner.selected_habit_id, inner.heatmap_week_offset)
         };
         if let Some(habit_id) = selected_id {
-            if let Some(clicked_date) = heatmap_hit_test(x, y, width, height, year, month) {
-                let today = chrono::Local::now().date_naive();
+            let today = chrono::Local::now().date_naive();
+            if let Some(clicked_date) =
+                loop_heatmap_hit_test(x, y, width, height, today, week_offset)
+            {
                 if clicked_date <= today {
-                    handle_toggle(&inner_gesture, &caches_gesture, habit_id, clicked_date, None);
+                    handle_toggle(
+                        &inner_gesture,
+                        &caches_gesture,
+                        habit_id,
+                        clicked_date,
+                        None,
+                    );
                 }
             }
         }
@@ -958,7 +1055,9 @@ fn setup_primary_menu(
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("backup.db");
-                toast.add_toast(libadwaita::Toast::new(&format!("Backup exported to {name}")));
+                toast.add_toast(libadwaita::Toast::new(&format!(
+                    "Backup exported to {name}"
+                )));
             }
             Err(err) => {
                 if !err.contains("cancelled") && !err.contains("Dismissed") {
@@ -1024,35 +1123,35 @@ fn setup_primary_menu(
 fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
     let curve_data_draw = Rc::clone(&caches.curve_data);
     let curve_color_draw = Rc::clone(&caches.curve_color);
-    details.curve_drawing_area.set_draw_func(move |_area, cr, width, height| {
-        let data = curve_data_draw.borrow();
-        let color = curve_color_draw.borrow();
-        draw_strength_curve(
-            cr,
-            f64::from(width),
-            f64::from(height),
-            &data,
-            &color,
-        );
-    });
+    details
+        .curve_drawing_area
+        .set_draw_func(move |_area, cr, width, height| {
+            let data = curve_data_draw.borrow();
+            let color = curve_color_draw.borrow();
+            draw_strength_curve(cr, f64::from(width), f64::from(height), &data, &color);
+        });
 
-    let month_nav_draw = Rc::clone(&caches.month_nav);
     let heatmap_entries_draw = Rc::clone(&caches.heatmap_entries);
     let heatmap_color_draw = Rc::clone(&caches.heatmap_color);
-    details.heatmap_drawing_area.set_draw_func(move |_area, cr, width, height| {
-        let nav = month_nav_draw.borrow();
-        let entries = heatmap_entries_draw.borrow();
-        let color = heatmap_color_draw.borrow();
-        draw_monthly_heatmap(
-            cr,
-            f64::from(width),
-            f64::from(height),
-            nav.year,
-            nav.month,
-            &entries,
-            &color,
-        );
-    });
+    let heatmap_offset_draw = Rc::clone(&caches.heatmap_week_offset);
+    let heatmap_today_draw = Rc::clone(&caches.heatmap_today);
+    details
+        .heatmap_drawing_area
+        .set_draw_func(move |_area, cr, width, height| {
+            let entries = heatmap_entries_draw.borrow();
+            let color = heatmap_color_draw.borrow();
+            let week_offset = *heatmap_offset_draw.borrow();
+            let today = *heatmap_today_draw.borrow();
+            draw_loop_heatmap(
+                cr,
+                f64::from(width),
+                f64::from(height),
+                today,
+                week_offset,
+                &entries,
+                &color,
+            );
+        });
 }
 
 /// Main application window providing Fast-Check List and push-navigation for details.
@@ -1103,14 +1202,15 @@ impl HabitWindow {
         window.set_content(Some(&toast_overlay));
 
         let now = chrono::Local::now();
-        let initial_nav = MonthNavigation::new(now.year(), now.month());
+        let today = now.date_naive();
 
         let caches = DrawCaches {
             curve_data: Rc::new(RefCell::new(Vec::new())),
             curve_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
-            month_nav: Rc::new(RefCell::new(initial_nav)),
             heatmap_entries: Rc::new(RefCell::new(HashMap::new())),
             heatmap_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            heatmap_week_offset: Rc::new(RefCell::new(0)),
+            heatmap_today: Rc::new(RefCell::new(today)),
         };
 
         connect_drawing_areas(&details, &caches);
@@ -1121,8 +1221,10 @@ impl HabitWindow {
             details_page: details.page.clone(),
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
-            month_nav: initial_nav,
+            heatmap_week_offset: 0,
             habits_list_box: sidebar.habits_list_box,
+            habit_score_label: sidebar.habit_score_label,
+            header_day_labels: sidebar.header_day_labels,
             title_label: details.title_label,
             subtitle_label: details.subtitle_label,
             color_badge: details.color_badge,
@@ -1132,7 +1234,8 @@ impl HabitWindow {
             current_streak_card_value: details.current_streak_card_value,
             best_streak_card_value: details.best_streak_card_value,
             curve_drawing_area: details.curve_drawing_area,
-            month_title_label: details.month_title_label,
+            today_week_btn: details.today_week_btn,
+            next_week_btn: details.next_week_btn,
             heatmap_drawing_area: details.heatmap_drawing_area,
         };
 

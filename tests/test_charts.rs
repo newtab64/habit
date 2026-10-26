@@ -1,12 +1,16 @@
 use chrono::{Datelike, NaiveDate};
 use habit::ui::charts::{
-    calculate_curve_points, days_in_month, heatmap_cell_rect, heatmap_hit_test, Point, Rect, Rgba,
+    calculate_curve_points, calculate_loop_heatmap_layout, days_in_month, heatmap_cell_rect,
+    heatmap_hit_test, loop_heatmap_cell_rect, loop_heatmap_hit_test, Point, Rect, Rgba,
 };
 
 #[test]
 fn test_loop_heatmap_cells_are_square_and_centered() {
     let rect = heatmap_cell_rect(0, 0, 400.0, 300.0);
-    assert!((rect.width - rect.height).abs() < 1e-6, "Cells must be square");
+    assert!(
+        (rect.width - rect.height).abs() < 1e-6,
+        "Cells must be square"
+    );
     assert!(rect.width >= 16.0 && rect.width <= 40.0);
 }
 
@@ -124,13 +128,27 @@ fn test_calculate_curve_points() {
     // Y coordinate mapping: 1.0 is at top (padding), 0.0 is at bottom (height - padding)
     let y_min = padding;
     let y_max = height - padding;
-    assert!((pts[0].y - y_max).abs() < 1e-4, "Value 0.0 should be at bottom");
-    assert!((pts[2].y - y_min).abs() < 1e-4, "Value 1.0 should be at top");
+    assert!(
+        (pts[0].y - y_max).abs() < 1e-4,
+        "Value 0.0 should be at bottom"
+    );
+    assert!(
+        (pts[2].y - y_min).abs() < 1e-4,
+        "Value 1.0 should be at top"
+    );
 
     // All points remain within bounds
     for pt in &pts {
-        assert!(pt.x >= 0.0 && pt.x <= width, "X point {} out of bounds", pt.x);
-        assert!(pt.y >= 0.0 && pt.y <= height, "Y point {} out of bounds", pt.y);
+        assert!(
+            pt.x >= 0.0 && pt.x <= width,
+            "X point {} out of bounds",
+            pt.x
+        );
+        assert!(
+            pt.y >= 0.0 && pt.y <= height,
+            "Y point {} out of bounds",
+            pt.y
+        );
     }
 
     // Values outside [0.0, 1.0] are clamped
@@ -302,4 +320,106 @@ fn test_geometry_types_and_helpers() {
     assert!(!rect.contains(15.0, 15.0));
     assert!(!rect.contains(45.0, 25.0));
     assert!(!rect.contains(15.0, 65.0));
+}
+
+#[test]
+fn test_loop_heatmap_layout_and_cell_geometry() {
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(); // Tuesday
+    let width = 480.0;
+    let height = 160.0;
+
+    let layout = calculate_loop_heatmap_layout(width, height, today, 0);
+    assert_eq!(layout.padding, 8.0);
+    assert!(layout.square_size >= 14.0 && layout.square_size <= 20.0);
+    assert_eq!(layout.cell_size, layout.square_size - layout.square_spacing);
+    assert!(layout.n_cols >= 20);
+
+    // Latest column Monday + 1 day should be Tuesday (today)
+    let last_col = layout.n_cols - 1;
+    let last_monday = layout.top_left_monday + chrono::Duration::weeks(last_col as i64);
+    assert_eq!(last_monday + chrono::Duration::days(1), today);
+
+    // Cell rect must be square
+    let cell = loop_heatmap_cell_rect(0, 0, &layout);
+    assert!((cell.width - cell.height).abs() < 1e-6);
+    assert_eq!(cell.width, layout.cell_size);
+
+    // Week offset moves top_left_monday back by exact weeks
+    let layout_offset_4 = calculate_loop_heatmap_layout(width, height, today, 4);
+    assert_eq!(
+        layout_offset_4.top_left_monday,
+        layout.top_left_monday - chrono::Duration::weeks(4)
+    );
+}
+
+#[test]
+fn test_loop_heatmap_hit_test_today_and_past() {
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(); // Tuesday (row 1)
+    let width = 480.0;
+    let height = 160.0;
+
+    let layout = calculate_loop_heatmap_layout(width, height, today, 0);
+    let last_col = layout.n_cols - 1;
+
+    // Hit test on today: last_col, row 1
+    let today_rect = loop_heatmap_cell_rect(last_col, 1, &layout);
+    let hit_today = loop_heatmap_hit_test(
+        today_rect.x + today_rect.width / 2.0,
+        today_rect.y + today_rect.height / 2.0,
+        width,
+        height,
+        today,
+        0,
+    );
+    assert_eq!(hit_today, Some(today));
+
+    // Hit test on yesterday (Monday = row 0 of last_col)
+    let mon_rect = loop_heatmap_cell_rect(last_col, 0, &layout);
+    let hit_mon = loop_heatmap_hit_test(
+        mon_rect.x + mon_rect.width / 2.0,
+        mon_rect.y + mon_rect.height / 2.0,
+        width,
+        height,
+        today,
+        0,
+    );
+    assert_eq!(hit_mon, Some(today - chrono::Duration::days(1)));
+
+    // Future days (Wednesday = row 2 of last_col) must return None
+    let wed_rect = loop_heatmap_cell_rect(last_col, 2, &layout);
+    let hit_wed = loop_heatmap_hit_test(
+        wed_rect.x + wed_rect.width / 2.0,
+        wed_rect.y + wed_rect.height / 2.0,
+        width,
+        height,
+        today,
+        0,
+    );
+    assert_eq!(hit_wed, None, "Future day after today must return None");
+
+    // Hit test in spacing gap between row 0 and row 1 must return None
+    let gap_y = (mon_rect.y + mon_rect.height + today_rect.y) / 2.0;
+    let hit_gap = loop_heatmap_hit_test(
+        today_rect.x + today_rect.width / 2.0,
+        gap_y,
+        width,
+        height,
+        today,
+        0,
+    );
+    assert_eq!(hit_gap, None, "Gap must return None");
+
+    // Hit test outside canvas must return None
+    assert_eq!(
+        loop_heatmap_hit_test(-10.0, 50.0, width, height, today, 0),
+        None
+    );
+    assert_eq!(
+        loop_heatmap_hit_test(50.0, -10.0, width, height, today, 0),
+        None
+    );
+    assert_eq!(
+        loop_heatmap_hit_test(500.0, 50.0, width, height, today, 0),
+        None
+    );
 }

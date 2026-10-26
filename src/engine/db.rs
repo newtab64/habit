@@ -134,9 +134,7 @@ impl Database {
     pub fn create_habit(&self, habit: &Habit) -> Result<i64, DbError> {
         let (habit_type_str, target_value, unit) = match &habit.habit_type {
             HabitType::Binary => ("binary", 1.0, None),
-            HabitType::Measurable { target, unit } => {
-                ("measurable", *target, Some(unit.as_str()))
-            }
+            HabitType::Measurable { target, unit } => ("measurable", *target, Some(unit.as_str())),
         };
 
         let created_at = if habit.created_at != 0 {
@@ -208,9 +206,7 @@ impl Database {
         let id = habit.id.ok_or(DbError::MissingId)?;
         let (habit_type_str, target_value, unit) = match &habit.habit_type {
             HabitType::Binary => ("binary", 1.0, None),
-            HabitType::Measurable { target, unit } => {
-                ("measurable", *target, Some(unit.as_str()))
-            }
+            HabitType::Measurable { target, unit } => ("measurable", *target, Some(unit.as_str())),
         };
 
         let archived_int: i64 = i64::from(habit.archived);
@@ -355,10 +351,8 @@ impl Database {
                 source_path.display()
             )));
         }
-        let src_conn = Connection::open_with_flags(
-            source_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
+        let src_conn =
+            Connection::open_with_flags(source_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
         let integrity: String =
             src_conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0))?;
@@ -373,7 +367,8 @@ impl Database {
         )?;
         if table_count < 2 {
             return Err(DbError::InvalidBackupSchema(
-                "Backup database is missing required tables ('habits', 'habit_entries')".to_string(),
+                "Backup database is missing required tables ('habits', 'habit_entries')"
+                    .to_string(),
             ));
         }
 

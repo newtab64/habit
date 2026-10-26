@@ -17,8 +17,13 @@ pub const SCHEDULE_SAT: u8 = 32;
 pub const SCHEDULE_SUN: u8 = 64;
 
 /// Bitmask for all 7 days of the week.
-pub const SCHEDULE_ALL_DAYS: u8 =
-    SCHEDULE_MON | SCHEDULE_TUE | SCHEDULE_WED | SCHEDULE_THU | SCHEDULE_FRI | SCHEDULE_SAT | SCHEDULE_SUN;
+pub const SCHEDULE_ALL_DAYS: u8 = SCHEDULE_MON
+    | SCHEDULE_TUE
+    | SCHEDULE_WED
+    | SCHEDULE_THU
+    | SCHEDULE_FRI
+    | SCHEDULE_SAT
+    | SCHEDULE_SUN;
 
 /// Bitmask for weekdays (Monday through Friday).
 pub const SCHEDULE_WORKDAYS: u8 =

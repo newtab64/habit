@@ -18,9 +18,18 @@ fn test_7_day_dates_chronological() {
 #[test]
 fn test_cycle_toggle_status() {
     assert_eq!(next_toggle_status(None), EntryStatus::Completed);
-    assert_eq!(next_toggle_status(Some(EntryStatus::Missed)), EntryStatus::Completed);
-    assert_eq!(next_toggle_status(Some(EntryStatus::Completed)), EntryStatus::Skipped);
-    assert_eq!(next_toggle_status(Some(EntryStatus::Skipped)), EntryStatus::Missed);
+    assert_eq!(
+        next_toggle_status(Some(EntryStatus::Missed)),
+        EntryStatus::Completed
+    );
+    assert_eq!(
+        next_toggle_status(Some(EntryStatus::Completed)),
+        EntryStatus::Skipped
+    );
+    assert_eq!(
+        next_toggle_status(Some(EntryStatus::Skipped)),
+        EntryStatus::Missed
+    );
 }
 
 #[test]
@@ -65,12 +74,7 @@ fn test_calculate_7_day_dates_month_and_year_boundaries() {
 
 #[test]
 fn test_bare_symbol_formatting_binary_habits() {
-    let habit = Habit::new(
-        "Read Book",
-        HabitType::Binary,
-        SCHEDULE_ALL_DAYS,
-        "#3584E4",
-    ).with_id(1);
+    let habit = Habit::new("Read Book", HabitType::Binary, SCHEDULE_ALL_DAYS, "#3584E4").with_id(1);
 
     let date = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap(); // Monday
 
@@ -132,7 +136,8 @@ fn test_bare_symbol_formatting_measurable_habits() {
         },
         SCHEDULE_ALL_DAYS,
         "#FF7800",
-    ).with_id(2);
+    )
+    .with_id(2);
 
     let date = NaiveDate::from_ymd_opt(2026, 10, 26).unwrap();
 
@@ -181,7 +186,8 @@ fn test_bare_symbol_formatting_measurable_habits() {
         },
         SCHEDULE_ALL_DAYS,
         "#3584E4",
-    ).with_id(3);
+    )
+    .with_id(3);
     let entry_float = HabitEntry::new(3, date, EntryStatus::Missed, 1.5);
     let sym_float = format_day_symbol(&habit_float, Some(&entry_float), date);
     assert_eq!(
@@ -237,7 +243,8 @@ fn test_predefined_rest_days_formatting() {
         HabitType::Binary,
         SCHEDULE_WORKDAYS,
         "#E01B24",
-    ).with_id(4);
+    )
+    .with_id(4);
 
     let sat = NaiveDate::from_ymd_opt(2026, 10, 24).unwrap(); // Saturday (Rest day)
     let sun = NaiveDate::from_ymd_opt(2026, 10, 25).unwrap(); // Sunday (Rest day)
@@ -293,7 +300,10 @@ fn test_generate_row_css_structure_and_styling() {
     let css = generate_row_css(42, "#3584E4");
 
     // Scoped row selector
-    assert!(css.contains(".habit-row-42"), "Must scope styles to habit row");
+    assert!(
+        css.contains(".habit-row-42"),
+        "Must scope styles to habit row"
+    );
 
     // Accent color applied to symbols
     assert!(css.contains(".symbol-completed"));

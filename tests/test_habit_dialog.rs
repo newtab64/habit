@@ -34,7 +34,10 @@ fn test_validate_valid_measurable_habit() {
         SCHEDULE_WORKDAYS,
         "ff7800",
     );
-    assert!(result.is_ok(), "Expected valid measurable habit: {result:?}");
+    assert!(
+        result.is_ok(),
+        "Expected valid measurable habit: {result:?}"
+    );
     let habit = result.unwrap();
     assert_eq!(habit.name, "Read Book");
     assert_eq!(
@@ -64,28 +67,65 @@ fn test_validate_empty_name() {
 fn test_validate_invalid_target_for_measurable() {
     // Measurable with target <= 0.0 or non-finite
     assert_eq!(
-        validate_habit_form("Drink Water", true, 0.0, "glasses", SCHEDULE_ALL_DAYS, "#3584E4"),
+        validate_habit_form(
+            "Drink Water",
+            true,
+            0.0,
+            "glasses",
+            SCHEDULE_ALL_DAYS,
+            "#3584E4"
+        ),
         Err(HabitValidationError::InvalidTarget)
     );
     assert_eq!(
-        validate_habit_form("Drink Water", true, -1.0, "glasses", SCHEDULE_ALL_DAYS, "#3584E4"),
+        validate_habit_form(
+            "Drink Water",
+            true,
+            -1.0,
+            "glasses",
+            SCHEDULE_ALL_DAYS,
+            "#3584E4"
+        ),
         Err(HabitValidationError::InvalidTarget)
     );
     assert_eq!(
-        validate_habit_form("Drink Water", true, f64::NAN, "glasses", SCHEDULE_ALL_DAYS, "#3584E4"),
+        validate_habit_form(
+            "Drink Water",
+            true,
+            f64::NAN,
+            "glasses",
+            SCHEDULE_ALL_DAYS,
+            "#3584E4"
+        ),
         Err(HabitValidationError::InvalidTarget)
     );
     assert_eq!(
-        validate_habit_form("Drink Water", true, f64::INFINITY, "glasses", SCHEDULE_ALL_DAYS, "#3584E4"),
+        validate_habit_form(
+            "Drink Water",
+            true,
+            f64::INFINITY,
+            "glasses",
+            SCHEDULE_ALL_DAYS,
+            "#3584E4"
+        ),
         Err(HabitValidationError::InvalidTarget)
     );
     assert_eq!(
-        validate_habit_form("Drink Water", true, f64::NEG_INFINITY, "glasses", SCHEDULE_ALL_DAYS, "#3584E4"),
+        validate_habit_form(
+            "Drink Water",
+            true,
+            f64::NEG_INFINITY,
+            "glasses",
+            SCHEDULE_ALL_DAYS,
+            "#3584E4"
+        ),
         Err(HabitValidationError::InvalidTarget)
     );
 
     // Binary habits do not fail on target <= 0.0
-    assert!(validate_habit_form("Drink Water", false, 0.0, "", SCHEDULE_ALL_DAYS, "#3584E4").is_ok());
+    assert!(
+        validate_habit_form("Drink Water", false, 0.0, "", SCHEDULE_ALL_DAYS, "#3584E4").is_ok()
+    );
 }
 
 #[test]
@@ -140,7 +180,8 @@ fn test_validate_hex_color_normalization() {
     let habit1 = validate_habit_form("Gym", false, 1.0, "", SCHEDULE_ALL_DAYS, "33d17a").unwrap();
     assert_eq!(habit1.accent_color, "#33D17A");
 
-    let habit2 = validate_habit_form("Gym", false, 1.0, "", SCHEDULE_ALL_DAYS, "   #ff7800   ").unwrap();
+    let habit2 =
+        validate_habit_form("Gym", false, 1.0, "", SCHEDULE_ALL_DAYS, "   #ff7800   ").unwrap();
     assert_eq!(habit2.accent_color, "#FF7800");
 }
 
@@ -150,10 +191,16 @@ fn test_error_display_and_trait_impls() {
     assert_eq!(format!("{err}"), "habit name cannot be empty");
 
     let err_target = HabitValidationError::InvalidTarget;
-    assert_eq!(format!("{err_target}"), "measurable target must be greater than zero");
+    assert_eq!(
+        format!("{err_target}"),
+        "measurable target must be greater than zero"
+    );
 
     let err_days = HabitValidationError::NoScheduledDays;
-    assert_eq!(format!("{err_days}"), "at least one scheduled day must be selected");
+    assert_eq!(
+        format!("{err_days}"),
+        "at least one scheduled day must be selected"
+    );
 
     let err_color = HabitValidationError::InvalidColor("bad hex".to_string());
     assert_eq!(format!("{err_color}"), "invalid accent color: bad hex");
