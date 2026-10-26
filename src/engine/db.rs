@@ -329,6 +329,12 @@ impl Database {
     pub fn export_backup(&self, target_path: &Path) -> Result<(), DbError> {
         if target_path.exists() {
             let _ = std::fs::remove_file(target_path);
+            let mut wal_path = target_path.to_path_buf().into_os_string();
+            wal_path.push("-wal");
+            let _ = std::fs::remove_file(wal_path);
+            let mut shm_path = target_path.to_path_buf().into_os_string();
+            shm_path.push("-shm");
+            let _ = std::fs::remove_file(shm_path);
         }
         let mut dst_conn = Connection::open(target_path)?;
         let backup = rusqlite::backup::Backup::new(&self.conn, &mut dst_conn)?;
@@ -340,10 +346,19 @@ impl Database {
     ///
     /// # Errors
     /// Returns [`DbError::IntegrityCheckFailed`] if SQLite integrity check fails,
-    /// [`DbError::InvalidBackupSchema`] if required tables are missing,
+    /// [`DbError::InvalidBackupSchema`] if the file is missing or required tables are absent,
     /// or [`DbError::Sqlite`] on restore failure.
     pub fn restore_backup(&mut self, source_path: &Path) -> Result<(), DbError> {
-        let src_conn = Connection::open(source_path)?;
+        if !source_path.is_file() {
+            return Err(DbError::InvalidBackupSchema(format!(
+                "Backup path does not exist or is not a regular file: {}",
+                source_path.display()
+            )));
+        }
+        let src_conn = Connection::open_with_flags(
+            source_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
 
         let integrity: String =
             src_conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0))?;
