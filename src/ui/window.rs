@@ -286,6 +286,7 @@ struct WindowInner {
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
+    delete_btn: gtk4::Button,
     strength_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
@@ -311,6 +312,7 @@ struct DetailsWidgets {
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
+    delete_btn: gtk4::Button,
     strength_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
@@ -407,7 +409,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
 
     for habit in &habits {
         let habit_id = habit.id.unwrap_or(0);
-        let start_bound = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap_or(today);
+        let start_bound = NaiveDate::MIN;
         let entries = inner.db.borrow().get_entries(habit_id, start_bound, today).unwrap_or_default();
         let strength = calculate_habit_strength(habit, &entries, today);
 
@@ -434,6 +436,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
             inner.edit_btn.set_visible(true);
+            inner.delete_btn.set_visible(true);
             inner.detail_stack.set_visible_child_name("details");
             inner.title_label.set_text(&selected_habit.name);
 
@@ -442,7 +445,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             inner.subtitle_label.set_text(&format!("Schedule: {sched_text} • Target: {target_text}"));
             inner.color_badge.set_text(&selected_habit.accent_color);
 
-            let start_bound = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap_or(today);
+            let start_bound = NaiveDate::MIN;
             let all_entries = inner.db.borrow().get_entries(sel_id, start_bound, today).unwrap_or_default();
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
@@ -488,6 +491,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     }
 
     inner.edit_btn.set_visible(false);
+    inner.delete_btn.set_visible(false);
     inner.detail_stack.set_visible_child_name("empty");
 }
 
@@ -648,6 +652,11 @@ fn build_details() -> DetailsWidgets {
     edit_btn.add_css_class("flat");
     content_header.pack_end(&edit_btn);
 
+    let delete_btn = gtk4::Button::from_icon_name("user-trash-symbolic");
+    delete_btn.set_tooltip_text(Some("Delete Habit"));
+    delete_btn.add_css_class("flat");
+    content_header.pack_end(&delete_btn);
+
     content_box.append(&content_header);
 
     let detail_stack = gtk4::Stack::new();
@@ -731,6 +740,7 @@ fn build_details() -> DetailsWidgets {
         subtitle_label,
         color_badge,
         edit_btn,
+        delete_btn,
         strength_card_value,
         current_streak_card_value,
         best_streak_card_value,
@@ -816,6 +826,16 @@ fn connect_controllers(
         });
     });
 
+    connect_detail_actions(inner_rc, caches, root_window, details);
+}
+
+#[cfg(feature = "ui")]
+fn connect_detail_actions(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    root_window: &gtk4::Window,
+    details: &DetailsWidgets,
+) {
     let inner_edit = Rc::clone(inner_rc);
     let caches_edit = caches.clone();
     let win_edit = root_window.clone();
@@ -842,6 +862,47 @@ fn connect_controllers(
                     inner.selected_habit_id = id_opt;
                 }
                 refresh(&inner_saved, &caches_saved);
+            });
+        }
+    });
+
+    let inner_delete = Rc::clone(inner_rc);
+    let caches_delete = caches.clone();
+    let win_delete = root_window.clone();
+    details.delete_btn.connect_clicked(move |_| {
+        let (selected_id, db) = {
+            let inner = inner_delete.borrow();
+            (inner.selected_habit_id, Rc::clone(&inner.db))
+        };
+        if let Some(id) = selected_id {
+            let habit_name = db.borrow().get_habit(id).ok().flatten().map_or_else(|| "this habit".to_string(), |h| h.name);
+            let alert = libadwaita::AlertDialog::new(
+                Some(&format!("Delete \"{habit_name}\"?")),
+                Some("All completion history and progress data for this habit will be permanently deleted. This action cannot be undone."),
+            );
+            alert.add_response("cancel", "Cancel");
+            alert.add_response("delete", "Delete");
+            alert.set_response_appearance("delete", libadwaita::ResponseAppearance::Destructive);
+            alert.set_default_response(Some("cancel"));
+
+            let inner_cb = Rc::clone(&inner_delete);
+            let caches_cb = caches_delete.clone();
+            alert.choose(&win_delete, gtk4::gio::Cancellable::NONE, move |response| {
+                if response == "delete" {
+                    let db = {
+                        let inner = inner_cb.borrow();
+                        Rc::clone(&inner.db)
+                    };
+                    if let Err(e) = db.borrow().delete_habit(id) {
+                        eprintln!("Failed to delete habit: {e}");
+                    }
+                    {
+                        let mut inner = inner_cb.borrow_mut();
+                        inner.selected_habit_id = None;
+                        inner.split_view.set_show_content(false);
+                    }
+                    refresh(&inner_cb, &caches_cb);
+                }
             });
         }
     });
@@ -1060,6 +1121,7 @@ impl HabitWindow {
             subtitle_label: details.subtitle_label,
             color_badge: details.color_badge,
             edit_btn: details.edit_btn.clone(),
+            delete_btn: details.delete_btn.clone(),
             strength_card_value: details.strength_card_value,
             current_streak_card_value: details.current_streak_card_value,
             best_streak_card_value: details.best_streak_card_value,
