@@ -27,7 +27,8 @@
         "cargo --offline build --release --features ui",
         "install -Dm755 target/release/habit /app/bin/habit",
         "install -Dm644 data/io.github.habit.Habit.desktop /app/share/applications/io.github.habit.Habit.desktop",
-        "install -Dm644 data/io.github.habit.Habit.metainfo.xml /app/share/metainfo/io.github.habit.Habit.metainfo.xml"
+        "install -Dm644 data/io.github.habit.Habit.metainfo.xml /app/share/metainfo/io.github.habit.Habit.metainfo.xml",
+        "install -Dm644 data/icons/hicolor/scalable/apps/io.github.habit.Habit.svg /app/share/icons/hicolor/scalable/apps/io.github.habit.Habit.svg"
       ],
       "sources": [
         {

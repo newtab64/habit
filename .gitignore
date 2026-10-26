@@ -1,4 +1,5 @@
 
 .superpowers/
 /target/
+.flatpak-builder/
 
