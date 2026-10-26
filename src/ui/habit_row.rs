@@ -245,9 +245,8 @@ fn attach_measurable_popover<F: Fn(i64, NaiveDate, Option<f64>) + 'static>(
     log_btn.add_css_class("suggested-action");
 
     let pop_close = popover.clone();
-    let spin_clone = spin.clone();
     log_btn.connect_clicked(move |_| {
-        let val = spin_clone.value();
+        let val = spin.value();
         pop_close.popdown();
         on_toggle(habit_id, date, Some(val));
     });

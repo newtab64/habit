@@ -2,5 +2,13 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 
 fn main() {
-    println!("Starting Habit ({})", habit::APP_ID);
+    #[cfg(feature = "ui")]
+    {
+        habit::ui::window::run_app();
+    }
+
+    #[cfg(not(feature = "ui"))]
+    {
+        println!("Starting Habit ({}) [Headless / CLI Mode]", habit::APP_ID);
+    }
 }
