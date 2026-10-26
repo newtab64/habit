@@ -1,0 +1,405 @@
+use std::fmt;
+#[cfg(feature = "ui")]
+use std::fmt::Write;
+
+use crate::engine::models::{
+    normalize_hex_color, ColorError, Habit, HabitType,
+};
+
+#[cfg(feature = "ui")]
+use gtk4::prelude::*;
+#[cfg(feature = "ui")]
+use libadwaita::prelude::*;
+
+#[cfg(feature = "ui")]
+use crate::engine::models::{
+    DEFAULT_ACCENT_COLOR, GNOME_PALETTE, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON,
+    SCHEDULE_SAT, SCHEDULE_SUN, SCHEDULE_THU, SCHEDULE_TUE, SCHEDULE_WED, SCHEDULE_WEEKENDS,
+    SCHEDULE_WORKDAYS,
+};
+
+/// Error variants encountered when validating a habit form submission.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HabitValidationError {
+    /// Habit display name was empty or whitespace only.
+    EmptyName,
+    /// Measurable habit target was less than or equal to zero, or not finite.
+    InvalidTarget,
+    /// No active scheduled days were selected.
+    NoScheduledDays,
+    /// Hex color format is invalid or malformed.
+    InvalidColor(String),
+}
+
+impl fmt::Display for HabitValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyName => write!(f, "habit name cannot be empty"),
+            Self::InvalidTarget => write!(f, "measurable target must be greater than zero"),
+            Self::NoScheduledDays => write!(f, "at least one scheduled day must be selected"),
+            Self::InvalidColor(err) => write!(f, "invalid accent color: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for HabitValidationError {}
+
+impl From<ColorError> for HabitValidationError {
+    fn from(err: ColorError) -> Self {
+        Self::InvalidColor(err.to_string())
+    }
+}
+
+/// Pure validation logic for habit creation and edit forms.
+///
+/// Ensures the name is non-empty, the scheduled days bitmask contains at least one day,
+/// any measurable target is strictly greater than zero and finite, and the accent color
+/// is normalized to standard 6-digit `#RRGGBB` format.
+///
+/// # Errors
+/// Returns [`HabitValidationError::EmptyName`] if `name` is empty or only whitespace,
+/// [`HabitValidationError::InvalidTarget`] if `is_measurable` is true and `target <= 0.0` or non-finite,
+/// [`HabitValidationError::NoScheduledDays`] if `scheduled_days == 0`, or
+/// [`HabitValidationError::InvalidColor`] if `hex_color` cannot be parsed into a 6-digit hex string.
+pub fn validate_habit_form(
+    name: &str,
+    is_measurable: bool,
+    target: f64,
+    unit: &str,
+    scheduled_days: u8,
+    hex_color: &str,
+) -> Result<Habit, HabitValidationError> {
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err(HabitValidationError::EmptyName);
+    }
+
+    let habit_type = if is_measurable {
+        if target <= 0.0 || !target.is_finite() {
+            return Err(HabitValidationError::InvalidTarget);
+        }
+        HabitType::Measurable {
+            target,
+            unit: unit.trim().to_string(),
+        }
+    } else {
+        HabitType::Binary
+    };
+
+    if scheduled_days == 0 {
+        return Err(HabitValidationError::NoScheduledDays);
+    }
+
+    let normalized_color = normalize_hex_color(hex_color)?;
+
+    Ok(Habit {
+        id: None,
+        name: trimmed_name.to_string(),
+        habit_type,
+        accent_color: normalized_color,
+        scheduled_days,
+        archived: false,
+        created_at: 0,
+    })
+}
+
+#[cfg(feature = "ui")]
+fn build_general_group(
+    habit: Option<&Habit>,
+) -> (
+    libadwaita::PreferencesGroup,
+    libadwaita::EntryRow,
+    libadwaita::ComboRow,
+    libadwaita::SpinRow,
+    libadwaita::EntryRow,
+) {
+    let group = libadwaita::PreferencesGroup::new();
+    group.set_title("General");
+
+    let name_row = libadwaita::EntryRow::new();
+    name_row.set_title("Name");
+    if let Some(h) = habit {
+        name_row.set_text(&h.name);
+    }
+    group.add(&name_row);
+
+    let type_model = gtk4::StringList::new(&["Binary (Done / Not Done)", "Measurable (Numerical Goal)"]);
+    let type_row = libadwaita::ComboRow::new();
+    type_row.set_title("Habit Type");
+    type_row.set_model(Some(&type_model));
+
+    let (is_init_meas, init_target, init_unit) = habit.map_or_else(
+        || (false, 10.0, "pages".to_string()),
+        |h| match &h.habit_type {
+            HabitType::Binary => (false, 10.0, "pages".to_string()),
+            HabitType::Measurable { target, unit } => (true, *target, unit.clone()),
+        },
+    );
+
+    type_row.set_selected(u32::from(is_init_meas));
+    group.add(&type_row);
+
+    let target_row = libadwaita::SpinRow::with_range(0.1, 1_000_000.0, 1.0);
+    target_row.set_title("Target Value");
+    target_row.set_digits(1);
+    target_row.set_value(init_target);
+    target_row.set_visible(is_init_meas);
+    group.add(&target_row);
+
+    let unit_row = libadwaita::EntryRow::new();
+    unit_row.set_title("Unit");
+    unit_row.set_text(&init_unit);
+    unit_row.set_visible(is_init_meas);
+    group.add(&unit_row);
+
+    let target_clone = target_row.clone();
+    let unit_clone = unit_row.clone();
+    type_row.connect_selected_notify(move |row| {
+        let is_meas = row.selected() == 1;
+        target_clone.set_visible(is_meas);
+        unit_clone.set_visible(is_meas);
+    });
+
+    (group, name_row, type_row, target_row, unit_row)
+}
+
+#[cfg(feature = "ui")]
+fn build_schedule_group(
+    initial_schedule: u8,
+) -> (
+    libadwaita::PreferencesGroup,
+    Vec<(u8, libadwaita::SwitchRow)>,
+) {
+    let group = libadwaita::PreferencesGroup::new();
+    group.set_title("Schedule & Rest Days");
+    group.set_description(Some(
+        "Unchecked days are pre-defined rest days (streaks preserved with no penalty)",
+    ));
+
+    let presets_row = libadwaita::ActionRow::new();
+    presets_row.set_title("Quick Presets");
+
+    let presets_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let all_days_btn = gtk4::Button::with_label("All Days");
+    all_days_btn.add_css_class("flat");
+    let weekdays_btn = gtk4::Button::with_label("Weekdays");
+    weekdays_btn.add_css_class("flat");
+    let weekends_btn = gtk4::Button::with_label("Weekends");
+    weekends_btn.add_css_class("flat");
+
+    presets_box.append(&all_days_btn);
+    presets_box.append(&weekdays_btn);
+    presets_box.append(&weekends_btn);
+    presets_row.add_suffix(&presets_box);
+    group.add(&presets_row);
+
+    let days_data = [
+        ("Monday", SCHEDULE_MON),
+        ("Tuesday", SCHEDULE_TUE),
+        ("Wednesday", SCHEDULE_WED),
+        ("Thursday", SCHEDULE_THU),
+        ("Friday", SCHEDULE_FRI),
+        ("Saturday", SCHEDULE_SAT),
+        ("Sunday", SCHEDULE_SUN),
+    ];
+
+    let mut switch_rows = Vec::new();
+    for (day_name, bit) in days_data {
+        let switch = libadwaita::SwitchRow::new();
+        switch.set_title(day_name);
+        switch.set_active((initial_schedule & bit) != 0);
+        group.add(&switch);
+        switch_rows.push((bit, switch));
+    }
+
+    let switches_for_all = switch_rows.iter().map(|(_, s)| s.clone()).collect::<Vec<_>>();
+    all_days_btn.connect_clicked(move |_| {
+        for s in &switches_for_all {
+            s.set_active(true);
+        }
+    });
+
+    let switches_for_work = switch_rows.iter().map(|(b, s)| (*b, s.clone())).collect::<Vec<_>>();
+    weekdays_btn.connect_clicked(move |_| {
+        for (b, s) in &switches_for_work {
+            let is_workday = (*b & SCHEDULE_WORKDAYS) != 0;
+            s.set_active(is_workday);
+        }
+    });
+
+    let switches_for_weekends = switch_rows.iter().map(|(b, s)| (*b, s.clone())).collect::<Vec<_>>();
+    weekends_btn.connect_clicked(move |_| {
+        for (b, s) in &switches_for_weekends {
+            let is_weekend = (*b & SCHEDULE_WEEKENDS) != 0;
+            s.set_active(is_weekend);
+        }
+    });
+
+    (group, switch_rows)
+}
+
+#[cfg(feature = "ui")]
+fn build_color_group(
+    initial_color: &str,
+) -> (
+    libadwaita::PreferencesGroup,
+    libadwaita::EntryRow,
+) {
+    let group = libadwaita::PreferencesGroup::new();
+    group.set_title("Accent Color");
+
+    let hex_row = libadwaita::EntryRow::new();
+    hex_row.set_title("Hex Code");
+    hex_row.set_text(initial_color);
+    group.add(&hex_row);
+
+    let palette_row = libadwaita::ActionRow::new();
+    palette_row.set_title("Preset Palette");
+
+    let palette_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    palette_box.set_valign(gtk4::Align::Center);
+
+    let mut css = String::new();
+    for (idx, color) in GNOME_PALETTE.iter().enumerate() {
+        let _ = writeln!(
+            css,
+            "button.color-swatch-{idx} {{ background: {color}; border-radius: 9999px; min-width: 24px; min-height: 24px; padding: 0; border: 1px solid rgba(0,0,0,0.2); }}"
+        );
+    }
+    let provider = gtk4::CssProvider::new();
+    provider.load_from_data(&css);
+    if let Some(display) = gtk4::gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
+    for (idx, color) in GNOME_PALETTE.iter().enumerate() {
+        let swatch = gtk4::Button::new();
+        swatch.set_tooltip_text(Some(color));
+        swatch.add_css_class(&format!("color-swatch-{idx}"));
+        swatch.add_css_class("circular");
+        swatch.add_css_class("flat");
+
+        let hex_clone = hex_row.clone();
+        let color_str = (*color).to_string();
+        swatch.connect_clicked(move |_| {
+            hex_clone.set_text(&color_str);
+        });
+
+        palette_box.append(&swatch);
+    }
+
+    palette_row.add_suffix(&palette_box);
+    group.add(&palette_row);
+
+    (group, hex_row)
+}
+
+/// Presents a native Libadwaita dialog for creating a new habit or editing an existing habit.
+///
+/// # Arguments
+/// * `parent` - The parent window to which this modal dialog is transient.
+/// * `habit` - `None` when creating a new habit, or `Some(&habit)` when editing.
+/// * `on_save` - Callback invoked with the validated `Habit` when confirmed.
+#[cfg(feature = "ui")]
+pub fn show_habit_dialog(
+    parent: &gtk4::Window,
+    habit: Option<&Habit>,
+    on_save: impl Fn(Habit) + 'static,
+) {
+    let title = if habit.is_some() {
+        "Edit Habit"
+    } else {
+        "New Habit"
+    };
+
+    let window = libadwaita::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title(title)
+        .default_width(460)
+        .default_height(580)
+        .build();
+
+    let toolbar_view = libadwaita::ToolbarView::new();
+
+    let header = libadwaita::HeaderBar::new();
+    let window_title = libadwaita::WindowTitle::new(title, "");
+    header.set_title_widget(Some(&window_title));
+
+    let cancel_btn = gtk4::Button::with_label("Cancel");
+    header.pack_start(&cancel_btn);
+
+    let save_btn = gtk4::Button::with_label("Save");
+    save_btn.add_css_class("suggested-action");
+    header.pack_end(&save_btn);
+
+    toolbar_view.add_top_bar(&header);
+
+    let pref_page = libadwaita::PreferencesPage::new();
+
+    // Group 1: General
+    let (group_general, name_row, type_row, target_row, unit_row) = build_general_group(habit);
+    pref_page.add(&group_general);
+
+    // Group 2: Schedule & Rest Days
+    let initial_schedule = habit.map_or(SCHEDULE_ALL_DAYS, |h| h.scheduled_days);
+    let (group_schedule, switch_rows) = build_schedule_group(initial_schedule);
+    pref_page.add(&group_schedule);
+
+    // Group 3: Accent Color
+    let initial_color = habit.map_or(DEFAULT_ACCENT_COLOR, |h| h.accent_color.as_str());
+    let (group_color, hex_row) = build_color_group(initial_color);
+    pref_page.add(&group_color);
+
+    let toast_overlay = libadwaita::ToastOverlay::new();
+    toast_overlay.set_child(Some(&pref_page));
+    toolbar_view.set_content(Some(&toast_overlay));
+    window.set_content(Some(&toolbar_view));
+
+    let win_cancel = window.clone();
+    cancel_btn.connect_clicked(move |_| {
+        win_cancel.close();
+    });
+
+    let win_save = window.clone();
+    let habit_orig = habit.cloned();
+
+    save_btn.connect_clicked(move |_| {
+        let name = name_row.text().to_string();
+        let is_meas = type_row.selected() == 1;
+        let target = target_row.value();
+        let unit = unit_row.text().to_string();
+
+        let mut scheduled_days = 0u8;
+        for (bit, s) in &switch_rows {
+            if s.is_active() {
+                scheduled_days |= *bit;
+            }
+        }
+
+        let hex_color = hex_row.text().to_string();
+
+        match validate_habit_form(&name, is_meas, target, &unit, scheduled_days, &hex_color) {
+            Ok(mut validated_habit) => {
+                if let Some(ref orig) = habit_orig {
+                    validated_habit.id = orig.id;
+                    validated_habit.archived = orig.archived;
+                    validated_habit.created_at = orig.created_at;
+                }
+                win_save.close();
+                on_save(validated_habit);
+            }
+            Err(err) => {
+                let toast = libadwaita::Toast::new(&err.to_string());
+                toast.set_priority(libadwaita::ToastPriority::High);
+                toast_overlay.add_toast(toast);
+            }
+        }
+    });
+
+    window.present();
+}

@@ -31,6 +31,8 @@ use crate::ui::charts::{
     days_in_month, draw_monthly_heatmap, draw_strength_curve, heatmap_hit_test, Rgba,
 };
 #[cfg(feature = "ui")]
+use crate::ui::habit_dialog::show_habit_dialog;
+#[cfg(feature = "ui")]
 use crate::ui::habit_row::HabitRowWidget;
 
 /// Navigation state for the monthly calendar heatmap.
@@ -281,6 +283,7 @@ struct WindowInner {
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
+    edit_btn: gtk4::Button,
     strength_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
@@ -297,12 +300,14 @@ struct SidebarWidgets {
 }
 
 #[cfg(feature = "ui")]
+#[derive(Clone)]
 struct DetailsWidgets {
     page: libadwaita::NavigationPage,
     detail_stack: gtk4::Stack,
     title_label: gtk4::Label,
     subtitle_label: gtk4::Label,
     color_badge: gtk4::Label,
+    edit_btn: gtk4::Button,
     strength_card_value: gtk4::Label,
     current_streak_card_value: gtk4::Label,
     best_streak_card_value: gtk4::Label,
@@ -424,6 +429,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     // 2. Update right pane details
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
+            inner.edit_btn.set_visible(true);
             inner.detail_stack.set_visible_child_name("details");
             inner.title_label.set_text(&selected_habit.name);
 
@@ -477,6 +483,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
     }
 
+    inner.edit_btn.set_visible(false);
     inner.detail_stack.set_visible_child_name("empty");
 }
 
@@ -630,6 +637,12 @@ fn build_details() -> DetailsWidgets {
     let content_header = libadwaita::HeaderBar::new();
     let content_title = libadwaita::WindowTitle::new("Habit Details", "");
     content_header.set_title_widget(Some(&content_title));
+
+    let edit_btn = gtk4::Button::from_icon_name("document-edit-symbolic");
+    edit_btn.set_tooltip_text(Some("Edit Habit"));
+    edit_btn.add_css_class("flat");
+    content_header.pack_end(&edit_btn);
+
     content_box.append(&content_header);
 
     let detail_stack = gtk4::Stack::new();
@@ -712,6 +725,7 @@ fn build_details() -> DetailsWidgets {
         title_label,
         subtitle_label,
         color_badge,
+        edit_btn,
         strength_card_value,
         current_streak_card_value,
         best_streak_card_value,
@@ -727,14 +741,13 @@ fn build_details() -> DetailsWidgets {
 fn connect_controllers(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
-    prev_month_btn: &gtk4::Button,
-    next_month_btn: &gtk4::Button,
-    heatmap_drawing_area: &gtk4::DrawingArea,
+    root_window: &gtk4::Window,
+    details: &DetailsWidgets,
     add_btn: &gtk4::Button,
 ) {
     let inner_prev = Rc::clone(inner_rc);
     let caches_prev = caches.clone();
-    prev_month_btn.connect_clicked(move |_| {
+    details.prev_month_btn.connect_clicked(move |_| {
         {
             let mut inner = inner_prev.borrow_mut();
             inner.month_nav = inner.month_nav.prev();
@@ -744,7 +757,7 @@ fn connect_controllers(
 
     let inner_next = Rc::clone(inner_rc);
     let caches_next = caches.clone();
-    next_month_btn.connect_clicked(move |_| {
+    details.next_month_btn.connect_clicked(move |_| {
         {
             let mut inner = inner_next.borrow_mut();
             inner.month_nav = inner.month_nav.next();
@@ -755,7 +768,7 @@ fn connect_controllers(
     let heatmap_gesture = gtk4::GestureClick::new();
     let inner_gesture = Rc::clone(inner_rc);
     let caches_gesture = caches.clone();
-    let area_weak = heatmap_drawing_area.downgrade();
+    let area_weak = details.heatmap_drawing_area.downgrade();
     heatmap_gesture.connect_pressed(move |_, _, x, y| {
         let Some(area) = area_weak.upgrade() else {
             return;
@@ -775,24 +788,52 @@ fn connect_controllers(
             }
         }
     });
-    heatmap_drawing_area.add_controller(heatmap_gesture);
+    details.heatmap_drawing_area.add_controller(heatmap_gesture);
 
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
+    let win_add = root_window.clone();
     add_btn.connect_clicked(move |_| {
-        let create_res = {
-            let inner = inner_add.borrow();
-            let count = inner.db.get_habits().map_or(0, |h| h.len());
-            let habit_name = format!("New Habit {}", count + 1);
-            let new_habit = Habit::new_binary(habit_name);
-            inner.db.create_habit(&new_habit)
+        let inner_saved = Rc::clone(&inner_add);
+        let caches_saved = caches_add.clone();
+        show_habit_dialog(&win_add, None, move |new_habit| {
+            let create_res = {
+                let inner = inner_saved.borrow();
+                inner.db.create_habit(&new_habit)
+            };
+            if let Ok(id) = create_res {
+                let mut inner = inner_saved.borrow_mut();
+                inner.selected_habit_id = Some(id);
+                inner.split_view.set_show_content(true);
+            }
+            refresh(&inner_saved, &caches_saved);
+        });
+    });
+
+    let inner_edit = Rc::clone(inner_rc);
+    let caches_edit = caches.clone();
+    let win_edit = root_window.clone();
+    details.edit_btn.connect_clicked(move |_| {
+        let habit_opt = {
+            let inner = inner_edit.borrow();
+            inner.selected_habit_id.and_then(|id| inner.db.get_habit(id).ok().flatten())
         };
-        if let Ok(id) = create_res {
-            let mut inner = inner_add.borrow_mut();
-            inner.selected_habit_id = Some(id);
-            inner.split_view.set_show_content(true);
+        if let Some(habit) = habit_opt {
+            let inner_saved = Rc::clone(&inner_edit);
+            let caches_saved = caches_edit.clone();
+            show_habit_dialog(&win_edit, Some(&habit), move |updated_habit| {
+                let id_opt = updated_habit.id;
+                {
+                    let inner = inner_saved.borrow();
+                    let _ = inner.db.update_habit(&updated_habit);
+                }
+                {
+                    let mut inner = inner_saved.borrow_mut();
+                    inner.selected_habit_id = id_opt;
+                }
+                refresh(&inner_saved, &caches_saved);
+            });
         }
-        refresh(&inner_add, &caches_add);
     });
 }
 
@@ -838,6 +879,7 @@ impl HabitWindow {
         split_view.set_sidebar(Some(&sidebar.page));
 
         let details = build_details();
+        let details_clone = details.clone();
         split_view.set_content(Some(&details.page));
 
         // Setup Responsive Breakpoint (< 760px collapses to single pane)
@@ -905,22 +947,23 @@ impl HabitWindow {
             title_label: details.title_label,
             subtitle_label: details.subtitle_label,
             color_badge: details.color_badge,
+            edit_btn: details.edit_btn.clone(),
             strength_card_value: details.strength_card_value,
             current_streak_card_value: details.current_streak_card_value,
             best_streak_card_value: details.best_streak_card_value,
             curve_drawing_area: details.curve_drawing_area,
             month_title_label: details.month_title_label,
-            heatmap_drawing_area: details.heatmap_drawing_area.clone(),
+            heatmap_drawing_area: details.heatmap_drawing_area,
         };
 
         let inner_rc = Rc::new(RefCell::new(inner));
+        let root_window: gtk4::Window = window.clone().upcast();
 
         connect_controllers(
             &inner_rc,
             &caches,
-            &details.prev_month_btn,
-            &details.next_month_btn,
-            &details.heatmap_drawing_area,
+            &root_window,
+            &details_clone,
             &sidebar.add_btn,
         );
 
