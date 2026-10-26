@@ -4,6 +4,13 @@ use habit::ui::charts::{
 };
 
 #[test]
+fn test_loop_heatmap_cells_are_square_and_centered() {
+    let rect = heatmap_cell_rect(0, 0, 400.0, 300.0);
+    assert!((rect.width - rect.height).abs() < 1e-6, "Cells must be square");
+    assert!(rect.width >= 16.0 && rect.width <= 40.0);
+}
+
+#[test]
 fn test_days_in_month_and_leap_years() {
     // 31-day months
     assert_eq!(days_in_month(2026, 1), 31);

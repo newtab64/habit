@@ -10,7 +10,9 @@ pub const HEATMAP_ROWS: usize = 6;
 /// Outer padding around the heatmap canvas (in pixels).
 pub const HEATMAP_PADDING: f64 = 8.0;
 /// Gap spacing between heatmap cells (in pixels).
-pub const HEATMAP_SPACING: f64 = 4.0;
+pub const HEATMAP_SPACING: f64 = 5.0;
+/// Top header height reserved for weekday label letters (M, T, W, T, F, S, S).
+pub const HEATMAP_HEADER_HEIGHT: f64 = 20.0;
 
 /// A 2D floating-point point.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -193,24 +195,31 @@ pub fn calculate_curve_points(data: &[f64], width: f64, height: f64, padding: f6
 
 /// Computes the bounding rectangle for a calendar cell at column `col` (0..=6)
 /// and row `row` (0..=5) on a canvas of dimension `(width, height)`.
+///
+/// Guaranteed to produce geometrically square cells centered horizontally within the canvas.
 #[must_use]
 #[allow(clippy::cast_precision_loss, clippy::suboptimal_flops)]
 pub fn heatmap_cell_rect(col: usize, row: usize, width: f64, height: f64) -> Rect {
     let total_spacing_x = HEATMAP_SPACING * 6.0;
     let total_spacing_y = HEATMAP_SPACING * 5.0;
     let avail_w = (width - 2.0 * HEATMAP_PADDING - total_spacing_x).max(0.0);
-    let avail_h = (height - 2.0 * HEATMAP_PADDING - total_spacing_y).max(0.0);
+    let avail_h = (height - 2.0 * HEATMAP_PADDING - HEATMAP_HEADER_HEIGHT - total_spacing_y).max(0.0);
     let cell_w = avail_w / 7.0;
     let cell_h = avail_h / 6.0;
+    let size = cell_w.min(cell_h).clamp(16.0, 36.0);
 
-    let x = HEATMAP_PADDING + (col as f64) * (cell_w + HEATMAP_SPACING);
-    let y = HEATMAP_PADDING + (row as f64) * (cell_h + HEATMAP_SPACING);
+    let grid_w = 7.0 * size + total_spacing_x;
+    let offset_x = ((width - grid_w) / 2.0).max(HEATMAP_PADDING);
+    let offset_y = HEATMAP_PADDING + HEATMAP_HEADER_HEIGHT;
+
+    let x = offset_x + (col as f64) * (size + HEATMAP_SPACING);
+    let y = offset_y + (row as f64) * (size + HEATMAP_SPACING);
 
     Rect {
         x,
         y,
-        width: cell_w,
-        height: cell_h,
+        width: size,
+        height: size,
     }
 }
 
@@ -334,15 +343,28 @@ pub fn draw_strength_curve(
     let _ = cr.stroke();
 }
 
-/// Renders a monthly calendar heatmap using Cairo.
+#[cfg(feature = "ui")]
+fn draw_rounded_rect(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
+    let radius = r.min(w / 2.0).min(h / 2.0);
+    cr.new_sub_path();
+    cr.arc(x + w - radius, y + radius, radius, -std::f64::consts::FRAC_PI_2, 0.0);
+    cr.arc(x + w - radius, y + h - radius, radius, 0.0, std::f64::consts::FRAC_PI_2);
+    cr.arc(x + radius, y + h - radius, radius, std::f64::consts::FRAC_PI_2, std::f64::consts::PI);
+    cr.arc(x + radius, y + radius, radius, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2);
+    cr.close_path();
+}
+
+/// Renders a monthly calendar heatmap using Cairo in Loop Habit Tracker style.
 ///
 /// Draws a 7-column calendar matrix (Monday through Sunday) for the given month:
-/// - Completed days: filled square in accent color.
-/// - Pre-defined rest / skipped days: subtle horizontal dash and muted fill.
-/// - Missed days: dark/translucent border.
-/// - Unreached future days: faint gray outline.
+/// - Weekday headers row: `M`, `T`, `W`, `T`, `F`, `S`, `S`.
+/// - Square cells with 4px rounded corners and day numbers (`1..31`).
+/// - Completed days: filled rounded square in accent color with white text.
+/// - Pre-defined rest / skipped days: muted accent fill with horizontal dash.
+/// - Missed days: soft neutral card fill with muted text.
+/// - Unreached future days: faint subtle background and dim text.
 #[cfg(feature = "ui")]
-#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_possible_truncation, clippy::similar_names)]
 pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
     cr: &cairo::Context,
     width: f64,
@@ -363,6 +385,24 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
     let days = days_in_month(year, month);
     let today = chrono::Local::now().date_naive();
 
+    // 1. Draw Weekday column headers (M, T, W, T, F, S, S)
+    let weekday_labels = ["M", "T", "W", "T", "F", "S", "S"];
+    cr.set_font_size(10.0);
+    cr.set_source_rgba(0.55, 0.55, 0.58, 0.85);
+
+    for (col, label) in weekday_labels.iter().enumerate() {
+        let header_rect = heatmap_cell_rect(col, 0, width, height);
+        if let Ok(extents) = cr.text_extents(label) {
+            let tx = header_rect.x + (header_rect.width - extents.width()) / 2.0 - extents.x_bearing();
+            let ty = HEATMAP_PADDING + 13.0;
+            cr.move_to(tx, ty);
+            let _ = cr.show_text(label);
+        }
+    }
+
+    // 2. Draw calendar day cells
+    let cell_radius = 4.0;
+
     for d in 1..=days {
         let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, d) else {
             continue;
@@ -372,47 +412,70 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
         let row = offset / HEATMAP_COLS;
         let rect = heatmap_cell_rect(col, row, width, height);
 
-        match entries.get(&date) {
+        let (text_color, is_rest) = match entries.get(&date) {
             Some(EntryStatus::Completed) => {
-                // Completed days: filled square in accent color
+                // Completed day: solid accent fill
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
-                cr.rectangle(rect.x, rect.y, rect.width, rect.height);
+                draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
+                (Rgba::new(1.0, 1.0, 1.0, 1.0), false)
             }
             Some(EntryStatus::Skipped) => {
-                // Pre-defined rest / skipped days: subtle horizontal dash or muted square
-                cr.set_source_rgba(color.r, color.g, color.b, 0.25);
-                cr.rectangle(rect.x, rect.y, rect.width, rect.height);
+                // Rest day: muted accent fill with horizontal dash
+                cr.set_source_rgba(color.r, color.g, color.b, 0.22);
+                draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
-
-                let dash_w = rect.width * 0.45;
-                let dash_x = rect.x + (rect.width - dash_w) / 2.0;
-                let dash_y = rect.y + rect.height / 2.0;
-                cr.set_source_rgba(color.r, color.g, color.b, 0.85);
-                cr.set_line_width(2.0);
-                cr.move_to(dash_x, dash_y);
-                cr.line_to(dash_x + dash_w, dash_y);
-                let _ = cr.stroke();
+                (Rgba::new(color.r, color.g, color.b, 0.95), true)
             }
             Some(EntryStatus::Missed) => {
-                // Missed days: dark/translucent border
-                cr.set_source_rgba(0.85, 0.2, 0.2, 0.6);
-                cr.set_line_width(1.5);
-                cr.rectangle(rect.x, rect.y, rect.width, rect.height);
-                let _ = cr.stroke();
+                // Missed day: soft neutral card fill
+                cr.set_source_rgba(0.22, 0.22, 0.24, 0.55);
+                draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
+                let _ = cr.fill();
+                (Rgba::new(0.65, 0.65, 0.68, 0.8), false)
             }
             None => {
                 if date > today {
-                    // Unreached future days: faint gray outline
-                    cr.set_source_rgba(0.6, 0.6, 0.6, 0.25);
+                    // Future day: faint outline
+                    cr.set_source_rgba(0.45, 0.45, 0.48, 0.12);
+                    draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
+                    let _ = cr.fill();
+                    (Rgba::new(0.5, 0.5, 0.52, 0.35), false)
                 } else {
-                    // Past day with no entry logged: muted outline
-                    cr.set_source_rgba(0.5, 0.5, 0.5, 0.45);
+                    // Past unlogged day: soft neutral fill
+                    cr.set_source_rgba(0.22, 0.22, 0.24, 0.45);
+                    draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
+                    let _ = cr.fill();
+                    (Rgba::new(0.55, 0.55, 0.58, 0.7), false)
                 }
-                cr.set_line_width(1.0);
-                cr.rectangle(rect.x, rect.y, rect.width, rect.height);
-                let _ = cr.stroke();
             }
+        };
+
+        // Draw rest dash if skipped
+        if is_rest {
+            let dash_w = rect.width * 0.4;
+            let dash_x = rect.x + (rect.width - dash_w) / 2.0;
+            let dash_y = rect.y + rect.height * 0.78;
+            cr.set_source_rgba(color.r, color.g, color.b, 0.85);
+            cr.set_line_width(2.0);
+            cr.move_to(dash_x, dash_y);
+            cr.line_to(dash_x + dash_w, dash_y);
+            let _ = cr.stroke();
+        }
+
+        // Draw centered day number text (1..31)
+        let day_str = d.to_string();
+        cr.set_font_size(10.5);
+        cr.set_source_rgba(text_color.r, text_color.g, text_color.b, text_color.a);
+        if let Ok(extents) = cr.text_extents(&day_str) {
+            let target_y = if is_rest {
+                rect.y + rect.height * 0.42
+            } else {
+                rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing()
+            };
+            let tx = rect.x + (rect.width - extents.width()) / 2.0 - extents.x_bearing();
+            cr.move_to(tx, target_y);
+            let _ = cr.show_text(&day_str);
         }
     }
 }

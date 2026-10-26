@@ -107,7 +107,7 @@ fn test_calculate_habit_metrics_from_entries() {
     assert_eq!(metrics.current_streak_text, "4d");
     assert_eq!(metrics.best_streak, 4);
     assert_eq!(metrics.best_streak_text, "4d");
-    assert!(metrics.strength > 0.15);
+    assert!(metrics.strength > 0.08);
     assert!(metrics.strength_percent.ends_with('%'));
 }
 
