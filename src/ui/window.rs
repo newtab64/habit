@@ -825,7 +825,9 @@ fn connect_controllers(
                 let id_opt = updated_habit.id;
                 {
                     let inner = inner_saved.borrow();
-                    let _ = inner.db.update_habit(&updated_habit);
+                    if let Err(e) = inner.db.update_habit(&updated_habit) {
+                        eprintln!("Failed to update habit: {e}");
+                    }
                 }
                 {
                     let mut inner = inner_saved.borrow_mut();
