@@ -4,6 +4,10 @@ use crate::engine::models::{EntryStatus, Habit, HabitEntry, HabitType};
 
 /// Default half-life in days for exponential habit strength decay ($T_{1/2} = 14.0$).
 pub const DEFAULT_HALF_LIFE_DAYS: f64 = 14.0;
+/// Half-life in days for gaining score ($T_{1/2} = 28.0$, harder to gain).
+pub const GAIN_HALF_LIFE_DAYS: f64 = 28.0;
+/// Half-life in days for losing score on missed days ($T_{1/2} = 14.0$).
+pub const LOSS_HALF_LIFE_DAYS: f64 = 14.0;
 
 /// Computes the exponential moving average decay factor $\alpha$ from half-life in days.
 ///
@@ -106,17 +110,18 @@ fn get_start_date(habit: &Habit, entry_map: &HashMap<NaiveDate, &HabitEntry>) ->
     }
 }
 
-/// Calculates the habit strength score as of the given date, in the range [0.0, 1.0].
+/// Calculates the habit score as of the given date, in the range [0.0, 1.0].
 ///
-/// Implements Android Loop Habit Tracker's exponential moving average decay formula:
-/// - Completed day: `S_t = S_{t-1} + (1.0 - S_{t-1}) * alpha`
-/// - Missed day: `S_t = S_{t-1} * (1.0 - alpha)`
+/// Implements Android Loop Habit Tracker's exponential moving average decay formula with
+/// asymmetric rates:
+/// - Completed day: `S_t = S_{t-1} + (1.0 - S_{t-1}) * alpha_gain` ($T_{1/2} = 28$ days)
+/// - Missed day: `S_t = S_{t-1} * (1.0 - alpha_loss)` ($T_{1/2} = 14$ days)
 /// - Pre-defined rest day / Skipped day: `S_t = S_{t-1}` (zero decay penalty)
 ///
 /// The calculation starts from habit creation date or earliest entry date up to `as_of`.
 /// If `as_of` has no entry yet, it is treated neutrally (evaluated up to yesterday / preserved).
 #[must_use]
-pub fn calculate_habit_strength(
+pub fn calculate_habit_score(
     habit: &Habit,
     entries: &[HabitEntry],
     as_of: NaiveDate,
@@ -134,8 +139,9 @@ pub fn calculate_habit_strength(
         return 0.0;
     }
 
-    let alpha = decay_alpha(DEFAULT_HALF_LIFE_DAYS);
-    let mut strength = 0.0_f64;
+    let alpha_gain = decay_alpha(GAIN_HALF_LIFE_DAYS);
+    let alpha_loss = decay_alpha(LOSS_HALF_LIFE_DAYS);
+    let mut score = 0.0_f64;
     let mut current_date = start_date;
 
     while current_date <= as_of {
@@ -144,14 +150,14 @@ pub fn calculate_habit_strength(
 
         match eval {
             DayEvaluation::Completed => {
-                strength = (1.0 - strength).mul_add(alpha, strength);
+                score = (1.0 - score).mul_add(alpha_gain, score);
             }
             DayEvaluation::Missed => {
-                strength *= 1.0 - alpha;
+                score *= 1.0 - alpha_loss;
             }
             DayEvaluation::Neutral => {}
         }
-        strength = strength.clamp(0.0, 1.0);
+        score = score.clamp(0.0, 1.0);
 
         match current_date.succ_opt() {
             Some(next) => current_date = next,
@@ -159,7 +165,17 @@ pub fn calculate_habit_strength(
         }
     }
 
-    strength
+    score
+}
+
+/// Backwards-compatibility alias for `calculate_habit_score`.
+#[must_use]
+pub fn calculate_habit_strength(
+    habit: &Habit,
+    entries: &[HabitEntry],
+    as_of: NaiveDate,
+) -> f64 {
+    calculate_habit_score(habit, entries, as_of)
 }
 
 /// Calculates the current and best streaks as of the given date.
@@ -223,12 +239,12 @@ pub fn calculate_streaks(
     (current_streak, best_streak)
 }
 
-/// Calculates historical habit strength for each of the last `days` days ending at `as_of`.
+/// Calculates historical habit score for each of the last `days` days ending at `as_of`.
 ///
 /// Returns a vector of length `days`, ordered oldest first, with the last element
 /// corresponding to `as_of`.
 #[must_use]
-pub fn calculate_strength_history(
+pub fn calculate_score_history(
     habit: &Habit,
     entries: &[HabitEntry],
     days: usize,
@@ -256,9 +272,10 @@ pub fn calculate_strength_history(
         return vec![0.0; days];
     }
 
-    let alpha = decay_alpha(DEFAULT_HALF_LIFE_DAYS);
-    let mut strength = 0.0_f64;
-    let mut strength_by_date = HashMap::with_capacity(days);
+    let alpha_gain = decay_alpha(GAIN_HALF_LIFE_DAYS);
+    let alpha_loss = decay_alpha(LOSS_HALF_LIFE_DAYS);
+    let mut score = 0.0_f64;
+    let mut score_by_date = HashMap::with_capacity(days);
     let mut current_date = start_date;
 
     while current_date <= as_of {
@@ -267,16 +284,16 @@ pub fn calculate_strength_history(
 
         match eval {
             DayEvaluation::Completed => {
-                strength = (1.0 - strength).mul_add(alpha, strength);
+                score = (1.0 - score).mul_add(alpha_gain, score);
             }
             DayEvaluation::Missed => {
-                strength *= 1.0 - alpha;
+                score *= 1.0 - alpha_loss;
             }
             DayEvaluation::Neutral => {}
         }
-        strength = strength.clamp(0.0, 1.0);
+        score = score.clamp(0.0, 1.0);
         if current_date >= window_start {
-            strength_by_date.insert(current_date, strength);
+            score_by_date.insert(current_date, score);
         }
 
         match current_date.succ_opt() {
@@ -288,7 +305,7 @@ pub fn calculate_strength_history(
     let mut history = Vec::with_capacity(days);
     let mut d = window_start;
     while d <= as_of {
-        let s = strength_by_date.get(&d).copied().unwrap_or(0.0);
+        let s = score_by_date.get(&d).copied().unwrap_or(0.0);
         history.push(s);
         match d.succ_opt() {
             Some(next) => d = next,
@@ -305,4 +322,15 @@ pub fn calculate_strength_history(
     }
 
     history
+}
+
+/// Backwards-compatibility alias for `calculate_score_history`.
+#[must_use]
+pub fn calculate_strength_history(
+    habit: &Habit,
+    entries: &[HabitEntry],
+    days: usize,
+    as_of: NaiveDate,
+) -> Vec<f64> {
+    calculate_score_history(habit, entries, days, as_of)
 }

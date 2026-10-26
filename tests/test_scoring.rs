@@ -1,8 +1,24 @@
 use chrono::NaiveDate;
-use habit::engine::models::{EntryStatus, Habit, HabitEntry};
+use habit::engine::models::{EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS};
 use habit::engine::scoring::{
-    calculate_habit_strength, calculate_streaks, calculate_strength_history, DEFAULT_HALF_LIFE_DAYS,
+    calculate_habit_score, calculate_habit_strength, calculate_streaks, calculate_strength_history,
+    DEFAULT_HALF_LIFE_DAYS,
 };
+
+#[test]
+fn test_asymmetric_scoring_harder_to_gain() {
+    let habit = Habit::new("Exercise", HabitType::Binary, SCHEDULE_ALL_DAYS, "#3584e4");
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+
+    // 7 consecutive completed days should yield ~15.9% (with 28-day gain half-life, not 30%+)
+    let mut entries = Vec::new();
+    for i in (0..7).rev() {
+        let d = today - chrono::Duration::days(i);
+        entries.push(HabitEntry::new(0, d, EntryStatus::Completed, 1.0));
+    }
+    let score = calculate_habit_score(&habit, &entries, today);
+    assert!((score - 0.159).abs() < 0.02, "Expected ~15.9%, got {score}");
+}
 
 #[test]
 fn test_predefined_rest_days_do_not_decay_or_break_streak() {
