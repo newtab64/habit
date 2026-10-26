@@ -1,0 +1,40 @@
+{
+  "app-id": "io.github.habit.Habit",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "47",
+  "sdk": "org.gnome.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
+  "command": "habit",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/habit/cargo"
+    }
+  },
+  "modules": [
+    {
+      "name": "habit",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cargo --offline fetch --manifest-path Cargo.toml",
+        "cargo --offline build --release --features ui",
+        "install -Dm755 target/release/habit /app/bin/habit",
+        "install -Dm644 data/io.github.habit.Habit.desktop /app/share/applications/io.github.habit.Habit.desktop",
+        "install -Dm644 data/io.github.habit.Habit.metainfo.xml /app/share/metainfo/io.github.habit.Habit.metainfo.xml"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": ".."
+        }
+      ]
+    }
+  ]
+}

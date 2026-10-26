@@ -1,0 +1,26 @@
+[package]
+name = "habit"
+version = "0.1.0"
+edition = "2021"
+authors = ["Habit Contributors"]
+description = "A native, local-only Linux habit tracker app for GNOME"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+rusqlite = { version = "0.41", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+gtk4 = { version = "0.9", optional = true }
+libadwaita = { version = "0.7", optional = true }
+cairo-rs = { version = "0.20", optional = true }
+
+[features]
+default = []
+ui = ["dep:gtk4", "dep:libadwaita", "dep:cairo-rs"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }

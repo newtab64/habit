@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.habit.Habit</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Habit</name>
+  <summary>Track habits with exponential decay scoring and pre-defined rest days</summary>
+  <description>
+    <p>
+      Habit is a native, privacy-first Linux habit tracker designed for GNOME.
+      It features Loop-style exponential moving average decay scoring, pre-defined
+      rest days, an intuitive 50/50 responsive split view, and local-only SQLite storage.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.habit.Habit.desktop</launchable>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-10-26" />
+  </releases>
+</component>

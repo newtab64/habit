@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Habit
+Comment=Track habits with exponential decay scoring and pre-defined rest days
+Type=Application
+Exec=habit
+Icon=io.github.habit.Habit
+Terminal=false
+Categories=GNOME;GTK;Utility;
+StartupNotify=true
