@@ -87,6 +87,9 @@ impl Rgba {
     pub fn from_hex(hex: &str) -> Option<Self> {
         let trimmed = hex.trim();
         let body = trimmed.strip_prefix('#').unwrap_or(trimmed);
+        if !body.is_ascii() {
+            return None;
+        }
         match body.len() {
             6 => {
                 let r = u8::from_str_radix(&body[0..2], 16).ok()?;
@@ -180,7 +183,7 @@ pub fn calculate_curve_points(data: &[f64], width: f64, height: f64, padding: f6
     data.iter()
         .enumerate()
         .map(|(i, &val)| {
-            let clamped = val.clamp(0.0, 1.0);
+            let clamped = if val.is_nan() { 0.0 } else { val.clamp(0.0, 1.0) };
             let x = padding + (i as f64) * step_x;
             let y = padding + (1.0 - clamped) * usable_h;
             Point { x, y }

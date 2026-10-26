@@ -80,6 +80,10 @@ fn test_rgba_from_hex() {
     assert!(Rgba::from_hex("#1234567").is_none());
     assert!(Rgba::from_hex("#123456789").is_none());
     assert!(Rgba::from_hex("#GGGGGG").is_none());
+
+    // Multi-byte non-ASCII characters with byte length 6 or 8 must safely return None
+    assert!(Rgba::from_hex("#🦀12").is_none());
+    assert!(Rgba::from_hex("#🦀1234").is_none());
 }
 
 #[test]
