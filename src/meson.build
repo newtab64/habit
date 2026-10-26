@@ -2,6 +2,7 @@ cargo = find_program('cargo', required: true)
 
 cargo_options = [
   '--manifest-path', meson.project_source_root() / 'Cargo.toml',
+  '--target-dir', meson.project_build_root() / 'target',
 ]
 
 if get_option('buildtype') == 'release'
@@ -26,7 +27,7 @@ custom_target(
     '@0@ build @1@ && cp "@2@" "@OUTPUT@"'.format(
       cargo.full_path(),
       ' '.join(cargo_options),
-      meson.project_source_root() / 'target' / rust_target_dir / 'habit',
+      meson.project_build_root() / 'target' / rust_target_dir / 'habit',
     ),
   ],
 )

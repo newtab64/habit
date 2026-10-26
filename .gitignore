@@ -2,4 +2,6 @@
 .superpowers/
 /target/
 .flatpak-builder/
+_build/
+build/
 
