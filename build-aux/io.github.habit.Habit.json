@@ -23,7 +23,6 @@
       "name": "habit",
       "buildsystem": "simple",
       "build-commands": [
-        "cargo --offline fetch --manifest-path Cargo.toml",
         "cargo --offline build --release --features ui",
         "install -Dm755 target/release/habit /app/bin/habit",
         "install -Dm644 data/io.github.habit.Habit.desktop /app/share/applications/io.github.habit.Habit.desktop",

@@ -2,6 +2,11 @@
 .superpowers/
 /target/
 .flatpak-builder/
+build-dir/
+repo/
+vendor/
+.cargo/
+*.flatpak
 _build/
 build/
 
