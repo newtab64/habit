@@ -398,13 +398,16 @@ fn handle_select(
     caches: &DrawCaches,
     habit_id: i64,
 ) {
-    let (nav_view, details_page) = {
+    let (nav_view, details_page, should_push) = {
         let mut inner = inner_rc.borrow_mut();
         inner.selected_habit_id = Some(habit_id);
-        (inner.nav_view.clone(), inner.details_page.clone())
+        let should_push = inner.nav_view.find_page("details").is_none();
+        (inner.nav_view.clone(), inner.details_page.clone(), should_push)
     };
     refresh(inner_rc, caches);
-    nav_view.push(&details_page);
+    if should_push {
+        nav_view.push(&details_page);
+    }
 }
 
 #[cfg(feature = "ui")]

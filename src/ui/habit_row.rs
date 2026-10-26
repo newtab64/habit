@@ -203,6 +203,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
 
     let title_label = gtk4::Label::new(Some(name));
     title_label.set_halign(gtk4::Align::Start);
+    title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");
     left_box.append(&title_label);
 
@@ -279,7 +280,7 @@ impl HabitRowWidget {
     ///
     /// # Arguments
     /// * `habit` - The habit definition.
-    /// * `strength` - Current habit strength in range $[0.0, 1.0]$.
+    /// * `score` - Current habit score in range $[0.0, 1.0]$.
     /// * `entries` - Historical entries for this habit.
     /// * `today` - The reference calendar date.
     /// * `on_toggle` - Callback invoked when a day symbol is clicked / logged: `(habit_id, date, Option<value>)`.
@@ -287,7 +288,7 @@ impl HabitRowWidget {
     #[allow(deprecated)]
     pub fn new<F1, F2>(
         habit: &Habit,
-        strength: f64,
+        score: f64,
         entries: &[HabitEntry],
         today: NaiveDate,
         on_toggle: F1,
@@ -306,23 +307,16 @@ impl HabitRowWidget {
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);
 
-        // Apply custom scoped CSS provider
+        // Apply custom scoped CSS provider to this row widget
         let css = generate_row_css(habit_id, &habit.accent_color);
         let provider = gtk4::CssProvider::new();
         provider.load_from_data(&css);
-        if let Some(display) = gtk4::gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
         container
             .style_context()
             .add_provider(&provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
         let (left_box, title_label, progress_bar) =
-            create_left_pane(&habit.name, strength, habit_id, on_select);
+            create_left_pane(&habit.name, score, habit_id, on_select);
         container.append(&left_box);
 
         // Right box: 7 day symbol columns
