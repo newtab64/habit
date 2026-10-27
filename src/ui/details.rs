@@ -454,12 +454,14 @@ pub fn connect_detail_actions(
                     if let Err(e) = db.borrow().delete_habit(id) {
                         eprintln!("Failed to delete habit: {e}");
                     }
-                    {
-                        let mut inner = inner_cb.borrow_mut();
-                        inner.selected_habit_id = None;
-                        inner.nav_view.pop();
-                    }
-                    refresh(&inner_cb, &caches_cb);
+                    gtk4::glib::idle_add_local_once(move || {
+                        {
+                            let mut inner = inner_cb.borrow_mut();
+                            inner.selected_habit_id = None;
+                            inner.nav_view.pop();
+                        }
+                        refresh(&inner_cb, &caches_cb);
+                    });
                 }
             });
         }

@@ -146,3 +146,36 @@ fn test_backup_export_overwrites_existing_file() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_refcell_borrow_safety_during_restore_and_read() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("portal_test_borrow_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let backup_path = temp_dir.join("backup.db");
+
+    let db_src = Database::open_in_memory().expect("open source db");
+    let habit = Habit::new_binary("Morning Routine");
+    db_src.create_habit(&habit).unwrap();
+    db_src.export_backup(&backup_path).unwrap();
+
+    let db_cell = std::rc::Rc::new(std::cell::RefCell::new(
+        Database::open_in_memory().expect("open target db"),
+    ));
+
+    // Simulate the exact flow in trigger_import_dialog:
+    // 1. Scoped borrow_mut for restore_backup
+    let restore_res = {
+        let mut db_guard = db_cell.borrow_mut();
+        db_guard.restore_backup(&backup_path)
+    };
+    assert!(restore_res.is_ok());
+
+    // 2. Read immediately afterwards (as done by refresh)
+    // If borrow_mut was still held, this would panic with "RefCell already mutably borrowed"
+    let habits = db_cell.borrow().get_habits().unwrap();
+    assert_eq!(habits.len(), 1);
+    assert_eq!(habits[0].name, "Morning Routine");
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
