@@ -520,7 +520,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
          .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n  transition: none;\n  animation: none;\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 16px;\n  margin-right: 16px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
          .editor-bottom-sheet * {\n  transition: none;\n  animation: none;\n}\n\
          .editor-sheet-header {\n  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n  transition: none;\n  animation: none;\n}\n",
     );
