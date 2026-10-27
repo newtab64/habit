@@ -337,11 +337,11 @@ pub fn show_habit_dialog(
     sheet_header.add_css_class("editor-sheet-header");
     sheet_header.set_margin_start(16);
     sheet_header.set_margin_end(16);
-    sheet_header.set_margin_top(10);
-    sheet_header.set_margin_bottom(6);
+    sheet_header.set_margin_top(12);
+    sheet_header.set_margin_bottom(10);
 
     let cancel_btn = gtk4::Button::with_label("Cancel");
-    cancel_btn.add_css_class("flat");
+    cancel_btn.add_css_class("destructive-action");
     sheet_header.set_start_widget(Some(&cancel_btn));
 
     let window_title = libadwaita::WindowTitle::new(title, "");
@@ -351,6 +351,10 @@ pub fn show_habit_dialog(
     save_btn.add_css_class("suggested-action");
     sheet_header.set_end_widget(Some(&save_btn));
     sheet_box.append(&sheet_header);
+
+    let header_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+    header_sep.set_margin_bottom(6);
+    sheet_box.append(&header_sep);
 
     let pref_page = libadwaita::PreferencesPage::new();
 

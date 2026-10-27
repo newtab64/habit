@@ -409,9 +409,12 @@ fn test_css_parsing_cleanliness() {
                   animation: none;\n\
                 }\n\
                 .editor-sheet-header {\n\
-                  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n\
                   transition: none;\n\
                   animation: none;\n\
+                }\n\
+                button.destructive-action.flat,\n\
+                button.destructive-action.flat image {\n\
+                  color: #e01b24;\n\
                 }\n";
             provider.load_from_data(sheet_css);
             println!("Errors captured for sheet CSS: {:?}", errors.borrow());

@@ -522,7 +522,9 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n  transition: none;\n  animation: none;\n}\n\
          .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
          .editor-bottom-sheet * {\n  transition: none;\n  animation: none;\n}\n\
-         .editor-sheet-header {\n  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n  transition: none;\n  animation: none;\n}\n",
+         .editor-sheet-header {\n  transition: none;\n  animation: none;\n}\n\
+         button.destructive-action.flat,\n\
+         button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
     );
     for h in &habits {
         if let Some(hid) = h.id {
@@ -942,6 +944,7 @@ fn build_details() -> DetailsWidgets {
     let delete_btn = gtk4::Button::from_icon_name("user-trash-symbolic");
     delete_btn.set_tooltip_text(Some("Delete Habit"));
     delete_btn.add_css_class("flat");
+    delete_btn.add_css_class("destructive-action");
     content_header.pack_end(&delete_btn);
 
     content_box.append(&content_header);
@@ -1037,8 +1040,8 @@ fn build_details() -> DetailsWidgets {
     sheet_header.add_css_class("editor-sheet-header");
     sheet_header.set_margin_start(16);
     sheet_header.set_margin_end(10);
-    sheet_header.set_margin_top(10);
-    sheet_header.set_margin_bottom(6);
+    sheet_header.set_margin_top(12);
+    sheet_header.set_margin_bottom(10);
 
     let editor_title = libadwaita::WindowTitle::new("Edit History", "");
     sheet_header.set_center_widget(Some(&editor_title));
@@ -1049,6 +1052,10 @@ fn build_details() -> DetailsWidgets {
     editor_close_btn.set_tooltip_text(Some("Close"));
     sheet_header.set_end_widget(Some(&editor_close_btn));
     sheet_box.append(&sheet_header);
+
+    let editor_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+    editor_sep.set_margin_bottom(4);
+    sheet_box.append(&editor_sep);
 
     let sheet_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     sheet_content.set_margin_start(12);
