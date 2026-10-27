@@ -4,6 +4,8 @@ pub mod habit_row;
 pub mod metrics;
 pub mod portal;
 #[cfg(feature = "ui")]
+pub mod sidebar;
+#[cfg(feature = "ui")]
 pub mod state;
 pub mod window;
 
@@ -25,6 +27,8 @@ pub use habit_dialog::show_habit_dialog;
 pub use habit_row::HabitRowWidget;
 #[cfg(feature = "ui")]
 pub use portal::{trigger_export_dialog, trigger_import_dialog};
+#[cfg(feature = "ui")]
+pub use sidebar::{build_sidebar, SidebarWidgets};
 #[cfg(feature = "ui")]
 pub use state::{
     default_database_path, get_database_path, handle_select, handle_toggle, refresh, DrawCaches,
