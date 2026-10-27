@@ -555,7 +555,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
                 .today_week_btn
                 .set_sensitive(inner.heatmap_week_offset > 0);
 
-            let weeks_back = (inner.heatmap_week_offset + 32) as i64;
+            let weeks_back = (inner.heatmap_week_offset + 104) as i64;
             let heatmap_start = today - chrono::Duration::weeks(weeks_back);
             let h_entries = inner
                 .db
@@ -889,7 +889,8 @@ fn show_history_editor_dialog(
         let db = inner.db.borrow();
         let h = db.get_habit(habit_id).ok().flatten();
         let today = chrono::Local::now().date_naive();
-        let e = db.get_entries(habit_id, NaiveDate::MIN, today).unwrap_or_default();
+        let start_date = today - chrono::Duration::weeks(104);
+        let e = db.get_entries(habit_id, start_date, today).unwrap_or_default();
         (h, e)
     };
     let Some(habit) = habit else { return };
@@ -963,9 +964,18 @@ fn show_history_editor_dialog(
 
     let week_offset = Rc::new(RefCell::new(0usize));
     let entries_map = Rc::new(RefCell::new({
-        let mut map = HashMap::new();
+        let today = chrono::Local::now().date_naive();
+        let start_date = today - chrono::Duration::weeks(104);
+        let mut map = HashMap::with_capacity(initial_entries.len() + 104 * 7);
         for e in initial_entries {
             map.insert(e.date, e.status);
+        }
+        let mut cur = start_date;
+        while cur <= today {
+            if !map.contains_key(&cur) && !habit.is_scheduled_on(cur.weekday()) {
+                map.insert(cur, EntryStatus::Skipped);
+            }
+            cur += chrono::Duration::days(1);
         }
         map
     }));
@@ -1052,27 +1062,52 @@ fn show_history_editor_dialog(
                 loop_heatmap_hit_test(x, y, width, height, today, offset)
             {
                 if clicked_date <= today {
+                    let is_scheduled = habit.is_scheduled_on(clicked_date.weekday());
                     let cur_status = entries_click.borrow().get(&clicked_date).copied();
-                    let (new_status, new_val) = match cur_status {
-                        None | Some(EntryStatus::Missed) => {
-                            (Some(EntryStatus::Completed), target_val)
+
+                    let (new_status, new_val, delete_db) = if is_scheduled {
+                        // Workday: default is unrecorded / Missed
+                        match cur_status {
+                            None | Some(EntryStatus::Missed) => {
+                                (Some(EntryStatus::Completed), target_val, false)
+                            }
+                            Some(EntryStatus::Completed) => {
+                                (Some(EntryStatus::Skipped), 0.0, false)
+                            }
+                            Some(EntryStatus::Skipped) => {
+                                (None, 0.0, true)
+                            }
                         }
-                        Some(EntryStatus::Completed) => {
-                            (Some(EntryStatus::Skipped), 0.0)
-                        }
-                        Some(EntryStatus::Skipped) => {
-                            (None, 0.0)
+                    } else {
+                        // Inherent Rest Day: default is Skipped
+                        match cur_status {
+                            Some(EntryStatus::Skipped) | None => {
+                                // Transition to Completed (worked out on rest day)
+                                (Some(EntryStatus::Completed), target_val, false)
+                            }
+                            Some(EntryStatus::Completed) => {
+                                // Transition to Missed (explicitly missed)
+                                (Some(EntryStatus::Missed), 0.0, false)
+                            }
+                            Some(EntryStatus::Missed) => {
+                                // Reset back to natural rest day (delete explicit DB entry)
+                                (Some(EntryStatus::Skipped), 0.0, true)
+                            }
                         }
                     };
 
                     {
                         let inner = inner_click.borrow();
                         let db = inner.db.borrow();
-                        if let Some(status) = new_status {
+                        if delete_db {
+                            let _ = db.delete_entry(habit_id, clicked_date);
+                        } else if let Some(status) = new_status {
                             let _ = db.log_entry(habit_id, clicked_date, status, new_val);
+                        }
+
+                        if let Some(status) = new_status {
                             entries_click.borrow_mut().insert(clicked_date, status);
                         } else {
-                            let _ = db.delete_entry(habit_id, clicked_date);
                             entries_click.borrow_mut().remove(&clicked_date);
                         }
                     }

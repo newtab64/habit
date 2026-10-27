@@ -576,27 +576,27 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
         let row = offset / HEATMAP_COLS;
         let rect = heatmap_cell_rect(col, row, width, height);
 
-        let (text_color, is_rest) = match entries.get(&date) {
+        let text_color = match entries.get(&date) {
             Some(EntryStatus::Completed) => {
                 // Completed day: solid accent fill
                 cr.set_source_rgba(color.r, color.g, color.b, color.a);
                 draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
-                (Rgba::new(1.0, 1.0, 1.0, 1.0), false)
+                Rgba::new(1.0, 1.0, 1.0, 1.0)
             }
             Some(EntryStatus::Skipped) => {
-                // Rest day: muted accent fill with horizontal dash
-                cr.set_source_rgba(color.r, color.g, color.b, 0.22);
+                // Rest day: muted accent fill without underline
+                cr.set_source_rgba(color.r, color.g, color.b, 0.25);
                 draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
-                (Rgba::new(color.r, color.g, color.b, 0.95), true)
+                Rgba::new(color.r, color.g, color.b, 0.95)
             }
             Some(EntryStatus::Missed) => {
                 // Missed day: soft neutral card fill
                 cr.set_source_rgba(0.22, 0.22, 0.24, 0.55);
                 draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
-                (Rgba::new(0.65, 0.65, 0.68, 0.8), false)
+                Rgba::new(0.65, 0.65, 0.68, 0.8)
             }
             None => {
                 if date > today {
@@ -604,39 +604,23 @@ pub fn draw_monthly_heatmap<S: std::hash::BuildHasher>(
                     cr.set_source_rgba(0.45, 0.45, 0.48, 0.12);
                     draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                     let _ = cr.fill();
-                    (Rgba::new(0.5, 0.5, 0.52, 0.35), false)
+                    Rgba::new(0.5, 0.5, 0.52, 0.35)
                 } else {
                     // Past unlogged day: soft neutral fill
                     cr.set_source_rgba(0.22, 0.22, 0.24, 0.45);
                     draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                     let _ = cr.fill();
-                    (Rgba::new(0.55, 0.55, 0.58, 0.7), false)
+                    Rgba::new(0.55, 0.55, 0.58, 0.7)
                 }
             }
         };
-
-        // Draw rest dash if skipped
-        if is_rest {
-            let dash_w = rect.width * 0.4;
-            let dash_x = rect.x + (rect.width - dash_w) / 2.0;
-            let dash_y = rect.height.mul_add(0.78, rect.y);
-            cr.set_source_rgba(color.r, color.g, color.b, 0.85);
-            cr.set_line_width(2.0);
-            cr.move_to(dash_x, dash_y);
-            cr.line_to(dash_x + dash_w, dash_y);
-            let _ = cr.stroke();
-        }
 
         // Draw centered day number text (1..31)
         let day_str = d.to_string();
         cr.set_font_size(10.5);
         cr.set_source_rgba(text_color.r, text_color.g, text_color.b, text_color.a);
         if let Ok(extents) = cr.text_extents(&day_str) {
-            let target_y = if is_rest {
-                rect.height.mul_add(0.42, rect.y)
-            } else {
-                rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing()
-            };
+            let target_y = rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing();
             let tx = rect.x + (rect.width - extents.width()) / 2.0 - extents.x_bearing();
             cr.move_to(tx, target_y);
             let _ = cr.show_text(&day_str);
@@ -742,63 +726,49 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
             let cell_date = col_monday + chrono::Duration::days(row as i64);
             let rect = loop_heatmap_cell_rect(col, row, &layout);
 
-            let (text_color, is_rest) = if cell_date > today {
+            let text_color = if cell_date > today {
                 // Future day
                 cr.set_source_rgba(0.45, 0.45, 0.48, 0.08);
                 draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                 let _ = cr.fill();
-                (Rgba::new(0.5, 0.5, 0.52, 0.25), false)
+                Rgba::new(0.5, 0.5, 0.52, 0.25)
             } else {
                 match entries.get(&cell_date) {
                     Some(EntryStatus::Completed) => {
                         cr.set_source_rgba(color.r, color.g, color.b, color.a);
                         draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                         let _ = cr.fill();
-                        (Rgba::new(1.0, 1.0, 1.0, 1.0), false)
+                        Rgba::new(1.0, 1.0, 1.0, 1.0)
                     }
                     Some(EntryStatus::Skipped) => {
-                        cr.set_source_rgba(color.r, color.g, color.b, 0.25);
+                        // Rest day: gentle tint of habit color without underline
+                        cr.set_source_rgba(color.r, color.g, color.b, 0.28);
                         draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                         let _ = cr.fill();
-                        (Rgba::new(color.r, color.g, color.b, 0.95), true)
+                        Rgba::new(color.r, color.g, color.b, 0.95)
                     }
                     Some(EntryStatus::Missed) => {
                         cr.set_source_rgba(0.22, 0.22, 0.24, 0.55);
                         draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                         let _ = cr.fill();
-                        (Rgba::new(0.65, 0.65, 0.68, 0.75), false)
+                        Rgba::new(0.65, 0.65, 0.68, 0.75)
                     }
                     None => {
                         cr.set_source_rgba(0.22, 0.22, 0.24, 0.35);
                         draw_rounded_rect(cr, rect.x, rect.y, rect.width, rect.height, cell_radius);
                         let _ = cr.fill();
-                        (Rgba::new(0.55, 0.55, 0.58, 0.55), false)
+                        Rgba::new(0.55, 0.55, 0.58, 0.55)
                     }
                 }
             };
-
-            // Draw rest dash if skipped
-            if is_rest {
-                let dash_w = rect.width * 0.35;
-                let dash_x = rect.x + (rect.width - dash_w) / 2.0;
-                let dash_y = rect.height.mul_add(0.8, rect.y);
-                cr.set_source_rgba(color.r, color.g, color.b, 0.85);
-                cr.set_line_width(1.5);
-                cr.move_to(dash_x, dash_y);
-                cr.line_to(dash_x + dash_w, dash_y);
-                let _ = cr.stroke();
-            }
 
             // Draw centered day number text (1..31)
             let day_str = cell_date.day().to_string();
             cr.set_font_size((layout.cell_size * 0.48).clamp(8.5, 12.0));
             cr.set_source_rgba(text_color.r, text_color.g, text_color.b, text_color.a);
             if let Ok(extents) = cr.text_extents(&day_str) {
-                let target_y = if is_rest {
-                    rect.height.mul_add(0.42, rect.y)
-                } else {
-                    rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing()
-                };
+                let target_y =
+                    rect.y + (rect.height - extents.height()) / 2.0 - extents.y_bearing();
                 let tx = rect.x + (rect.width - extents.width()) / 2.0 - extents.x_bearing();
                 cr.move_to(tx, target_y);
                 let _ = cr.show_text(&day_str);
