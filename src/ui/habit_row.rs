@@ -38,32 +38,6 @@ pub struct DaySymbolDisplay {
     pub is_accent: bool,
 }
 
-/// Calculates the array of 7 consecutive dates ending on `today` (chronological left-to-right: today-6 to today).
-#[must_use]
-pub fn calculate_7_day_dates(today: NaiveDate) -> [NaiveDate; 7] {
-    [
-        today
-            .checked_sub_signed(chrono::Duration::days(6))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(5))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(4))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(3))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(2))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(1))
-            .unwrap_or(today),
-        today,
-    ]
-}
-
 /// Cycles to the next entry status in the sequence:
 /// `None / Missed` -> `Completed` -> `Skipped` -> `Missed`.
 #[must_use]

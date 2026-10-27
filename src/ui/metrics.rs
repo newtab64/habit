@@ -143,12 +143,6 @@ pub fn format_score_percentage(score: f64) -> String {
     format!("{pct:.0}%")
 }
 
-/// Backwards-compatibility alias for `format_score_percentage`.
-#[must_use]
-pub fn format_strength_percentage(strength: f64) -> String {
-    format_score_percentage(strength)
-}
-
 /// Formats a streak count into a badge string (e.g. `"4d"`).
 #[must_use]
 pub fn format_streak_badge(streak: u32) -> String {

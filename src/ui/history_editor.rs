@@ -352,15 +352,3 @@ impl HistoryEditorWidgets {
         root_window.add_controller(key_controller);
     }
 }
-
-/// Connects event controllers, gestures, and drawing logic for the history editor.
-#[cfg(feature = "ui")]
-pub fn connect_history_editor(
-    editor: &HistoryEditorWidgets,
-    inner_rc: &Rc<RefCell<WindowInner>>,
-    caches: &DrawCaches,
-    root_window: &gtk4::Window,
-) {
-    editor.connect_drawing_area(caches);
-    editor.connect_controllers(inner_rc, caches, root_window);
-}

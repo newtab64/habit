@@ -170,12 +170,6 @@ pub enum HabitType {
 }
 
 impl HabitType {
-    /// Returns true if this is a binary habit.
-    #[must_use]
-    pub const fn is_binary(&self) -> bool {
-        matches!(self, Self::Binary)
-    }
-
     /// Returns true if this is a measurable habit.
     #[must_use]
     pub const fn is_measurable(&self) -> bool {
@@ -354,20 +348,6 @@ impl Habit {
     #[must_use]
     pub fn with_color(mut self, color: impl Into<String>) -> Self {
         self.accent_color = color.into();
-        self
-    }
-
-    /// Sets the creation timestamp (builder method).
-    #[must_use]
-    pub const fn with_created_at(mut self, created_at: i64) -> Self {
-        self.created_at = created_at;
-        self
-    }
-
-    /// Sets the archived flag (builder method).
-    #[must_use]
-    pub const fn with_archived(mut self, archived: bool) -> Self {
-        self.archived = archived;
         self
     }
 }

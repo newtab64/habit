@@ -356,20 +356,14 @@ pub fn connect_detail_actions(
     let inner_prev = Rc::clone(inner_rc);
     let caches_prev = caches.clone();
     details.prev_week_btn.connect_clicked(move |_| {
-        {
-            let mut inner = inner_prev.borrow_mut();
-            inner.heatmap_week_offset += 12;
-        }
+        *caches_prev.heatmap_week_offset.borrow_mut() += 12;
         refresh(&inner_prev, &caches_prev);
     });
 
     let inner_today_btn = Rc::clone(inner_rc);
     let caches_today_btn = caches.clone();
     details.today_week_btn.connect_clicked(move |_| {
-        {
-            let mut inner = inner_today_btn.borrow_mut();
-            inner.heatmap_week_offset = 0;
-        }
+        *caches_today_btn.heatmap_week_offset.borrow_mut() = 0;
         refresh(&inner_today_btn, &caches_today_btn);
     });
 
@@ -377,8 +371,8 @@ pub fn connect_detail_actions(
     let caches_next = caches.clone();
     details.next_week_btn.connect_clicked(move |_| {
         {
-            let mut inner = inner_next.borrow_mut();
-            inner.heatmap_week_offset = inner.heatmap_week_offset.saturating_sub(12);
+            let mut off = caches_next.heatmap_week_offset.borrow_mut();
+            *off = off.saturating_sub(12);
         }
         refresh(&inner_next, &caches_next);
     });

@@ -285,7 +285,6 @@ impl HabitWindow {
             toast_overlay: toast_overlay.clone(),
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
-            heatmap_week_offset: 0,
             habits_list_box: sidebar.habits_list_box,
             habit_score_label: sidebar.habit_score_label,
             header_day_labels: sidebar.header_day_labels,

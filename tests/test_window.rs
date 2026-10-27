@@ -4,8 +4,9 @@ use habit::engine::models::{
     SCHEDULE_SAT, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 use habit::ui::window::{
-    calculate_habit_metrics, format_percentage_diff, format_schedule_summary, format_streak_badge,
-    format_strength_percentage, format_target_summary, toggle_entry_state, MonthNavigation,
+    calculate_habit_metrics, format_percentage_diff, format_schedule_summary,
+    format_score_percentage, format_streak_badge, format_target_summary, toggle_entry_state,
+    MonthNavigation,
 };
 
 #[test]
@@ -77,12 +78,12 @@ fn test_schedule_and_metrics_formatting() {
     assert_eq!(format_schedule_summary(gym_mask), "Mon, Wed, Fri, Sat");
     assert_eq!(format_schedule_summary(0), "None");
 
-    // Strength percentage formatting
-    assert_eq!(format_strength_percentage(0.88), "88%");
-    assert_eq!(format_strength_percentage(0.884), "88%");
-    assert_eq!(format_strength_percentage(0.886), "89%");
-    assert_eq!(format_strength_percentage(0.0), "0%");
-    assert_eq!(format_strength_percentage(1.0), "100%");
+    // Score percentage formatting
+    assert_eq!(format_score_percentage(0.88), "88%");
+    assert_eq!(format_score_percentage(0.884), "88%");
+    assert_eq!(format_score_percentage(0.886), "89%");
+    assert_eq!(format_score_percentage(0.0), "0%");
+    assert_eq!(format_score_percentage(1.0), "100%");
 
     // Streak badge formatting
     assert_eq!(format_streak_badge(0), "0d");

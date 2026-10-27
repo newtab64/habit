@@ -6,8 +6,8 @@ use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_WORKDAYS,
 };
 use habit::ui::habit_row::{
-    calculate_5_day_dates, calculate_7_day_dates, format_day_symbol, generate_row_css,
-    next_toggle_status, DaySymbolDisplay,
+    calculate_5_day_dates, format_day_symbol, generate_row_css, next_toggle_status,
+    DaySymbolDisplay,
 };
 
 #[test]
@@ -35,14 +35,6 @@ fn test_5_day_dates_month_and_year_boundaries() {
 }
 
 #[test]
-fn test_7_day_dates_chronological() {
-    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
-    let dates = calculate_7_day_dates(today);
-    assert_eq!(dates[0], today - chrono::Duration::days(6));
-    assert_eq!(dates[6], today);
-}
-
-#[test]
 fn test_cycle_toggle_status() {
     assert_eq!(next_toggle_status(None), EntryStatus::Completed);
     assert_eq!(
@@ -57,46 +49,6 @@ fn test_cycle_toggle_status() {
         next_toggle_status(Some(EntryStatus::Skipped)),
         EntryStatus::Missed
     );
-}
-
-#[test]
-fn test_calculate_7_day_dates_standard() {
-    let today = NaiveDate::from_ymd_opt(2026, 10, 26).expect("Valid date");
-    let dates = calculate_7_day_dates(today);
-
-    assert_eq!(dates.len(), 7);
-    assert_eq!(dates[0], NaiveDate::from_ymd_opt(2026, 10, 20).unwrap()); // -6d
-    assert_eq!(dates[1], NaiveDate::from_ymd_opt(2026, 10, 21).unwrap()); // -5d
-    assert_eq!(dates[2], NaiveDate::from_ymd_opt(2026, 10, 22).unwrap()); // -4d
-    assert_eq!(dates[3], NaiveDate::from_ymd_opt(2026, 10, 23).unwrap()); // -3d
-    assert_eq!(dates[4], NaiveDate::from_ymd_opt(2026, 10, 24).unwrap()); // -2d
-    assert_eq!(dates[5], NaiveDate::from_ymd_opt(2026, 10, 25).unwrap()); // -1d
-    assert_eq!(dates[6], NaiveDate::from_ymd_opt(2026, 10, 26).unwrap()); // Today
-}
-
-#[test]
-fn test_calculate_7_day_dates_month_and_year_boundaries() {
-    // Month boundary: Nov 3 -> crosses into Oct
-    let nov_3 = NaiveDate::from_ymd_opt(2026, 11, 3).expect("Valid date");
-    let dates_nov = calculate_7_day_dates(nov_3);
-    assert_eq!(dates_nov[0], NaiveDate::from_ymd_opt(2026, 10, 28).unwrap());
-    assert_eq!(dates_nov[1], NaiveDate::from_ymd_opt(2026, 10, 29).unwrap());
-    assert_eq!(dates_nov[2], NaiveDate::from_ymd_opt(2026, 10, 30).unwrap());
-    assert_eq!(dates_nov[3], NaiveDate::from_ymd_opt(2026, 10, 31).unwrap());
-    assert_eq!(dates_nov[4], NaiveDate::from_ymd_opt(2026, 11, 1).unwrap());
-    assert_eq!(dates_nov[5], NaiveDate::from_ymd_opt(2026, 11, 2).unwrap());
-    assert_eq!(dates_nov[6], NaiveDate::from_ymd_opt(2026, 11, 3).unwrap());
-
-    // Year boundary: Jan 3, 2026 -> crosses into Dec 2025
-    let jan_3 = NaiveDate::from_ymd_opt(2026, 1, 3).expect("Valid date");
-    let dates_jan = calculate_7_day_dates(jan_3);
-    assert_eq!(dates_jan[0], NaiveDate::from_ymd_opt(2025, 12, 28).unwrap());
-    assert_eq!(dates_jan[1], NaiveDate::from_ymd_opt(2025, 12, 29).unwrap());
-    assert_eq!(dates_jan[2], NaiveDate::from_ymd_opt(2025, 12, 30).unwrap());
-    assert_eq!(dates_jan[3], NaiveDate::from_ymd_opt(2025, 12, 31).unwrap());
-    assert_eq!(dates_jan[4], NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
-    assert_eq!(dates_jan[5], NaiveDate::from_ymd_opt(2026, 1, 2).unwrap());
-    assert_eq!(dates_jan[6], NaiveDate::from_ymd_opt(2026, 1, 3).unwrap());
 }
 
 #[test]

@@ -60,7 +60,6 @@ pub struct WindowInner {
     pub toast_overlay: libadwaita::ToastOverlay,
     pub db: Rc<Database>,
     pub selected_habit_id: Option<i64>,
-    pub heatmap_week_offset: usize,
     pub habits_list_box: gtk4::Box,
     pub habit_score_label: gtk4::Label,
     pub header_day_labels: Vec<gtk4::Label>,
@@ -97,8 +96,6 @@ pub fn default_database_path() -> PathBuf {
     let _ = std::fs::create_dir_all(&data_dir);
     data_dir.join("habits.db")
 }
-
-pub use default_database_path as get_database_path;
 
 /// Handles toggling a habit's status for a given date.
 pub fn handle_toggle(
@@ -284,14 +281,11 @@ fn update_charts(
     inner.ring_drawing_area.queue_draw();
 
     // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
-    inner
-        .next_week_btn
-        .set_sensitive(inner.heatmap_week_offset > 0);
-    inner
-        .today_week_btn
-        .set_sensitive(inner.heatmap_week_offset > 0);
+    let week_offset = *caches.heatmap_week_offset.borrow();
+    inner.next_week_btn.set_sensitive(week_offset > 0);
+    inner.today_week_btn.set_sensitive(week_offset > 0);
 
-    let offset_weeks = i64::try_from(inner.heatmap_week_offset).unwrap_or(0);
+    let offset_weeks = i64::try_from(week_offset).unwrap_or(0);
     let weeks_back = offset_weeks + 104;
     let heatmap_start = today - chrono::Duration::weeks(weeks_back);
     let Some(sel_id) = selected_habit.id else {
@@ -317,7 +311,6 @@ fn update_charts(
 
     *caches.heatmap_entries.borrow_mut() = map;
     *caches.heatmap_color.borrow_mut() = rgba;
-    *caches.heatmap_week_offset.borrow_mut() = inner.heatmap_week_offset;
     *caches.heatmap_today.borrow_mut() = today;
     inner.heatmap_drawing_area.queue_draw();
 }
