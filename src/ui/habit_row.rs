@@ -263,6 +263,11 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     progress_bar.set_fraction(strength.clamp(0.0, 1.0));
     progress_bar.set_show_text(false);
     progress_bar.add_css_class("habit-progress");
+    progress_bar.set_halign(gtk4::Align::Start);
+    progress_bar.set_hexpand(false);
+    progress_bar.set_size_request(80, 5);
+    let pct = (strength.clamp(0.0, 1.0) * 100.0).round();
+    progress_bar.set_tooltip_text(Some(&format!("{pct:.0}%")));
     left_box.append(&progress_bar);
 
     let select_gesture = gtk4::GestureClick::new();
@@ -353,8 +358,8 @@ impl HabitRowWidget {
         let habit_id = habit.id.unwrap_or(0);
         let on_toggle = std::rc::Rc::new(on_toggle);
 
-        // Main horizontal container with gap between habit info and tickboxes
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
+        // Main horizontal container with clean gap between habit info and tickboxes
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
         container.add_css_class("habit-row");
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);

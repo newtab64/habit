@@ -631,8 +631,8 @@ fn build_sidebar() -> SidebarWidgets {
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
-    // Quick-check column headers with gap 24
-    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 24);
+    // Quick-check column headers with gap 12
+    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
     quick_check_header.set_margin_top(8);
