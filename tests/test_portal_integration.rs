@@ -42,7 +42,7 @@ fn test_backup_export_and_atomic_restore() {
     assert!(backup_path.exists());
 
     // Restore into empty target DB
-    let mut db_dst = Database::open_in_memory().expect("open target db");
+    let db_dst = Database::open_in_memory().expect("open target db");
     assert_eq!(db_dst.get_habits().unwrap().len(), 0);
 
     db_dst
@@ -72,7 +72,7 @@ fn test_restore_rejects_corrupted_file() {
     let corrupt_file = temp_dir.join("corrupted.db");
     std::fs::write(&corrupt_file, b"this is not a valid sqlite database file").unwrap();
 
-    let mut db = Database::open_in_memory().expect("open in-memory db");
+    let db = Database::open_in_memory().expect("open in-memory db");
     let res = db.restore_backup(&corrupt_file);
     assert!(res.is_err(), "restoring corrupt file must fail");
 
@@ -91,7 +91,7 @@ fn test_restore_rejects_missing_tables() {
             .unwrap();
     }
 
-    let mut db = Database::open_in_memory().expect("open in-memory db");
+    let db = Database::open_in_memory().expect("open in-memory db");
     let res = db.restore_backup(&invalid_schema_file);
     match res {
         Err(DbError::InvalidBackupSchema(msg)) => {
@@ -106,7 +106,7 @@ fn test_restore_rejects_missing_tables() {
 #[test]
 fn test_restore_rejects_nonexistent_file() {
     let nonexistent_file = std::path::PathBuf::from("/nonexistent/path/habit_backup.db");
-    let mut db = Database::open_in_memory().expect("open in-memory db");
+    let db = Database::open_in_memory().expect("open in-memory db");
     let res = db.restore_backup(&nonexistent_file);
     match res {
         Err(DbError::InvalidBackupSchema(msg)) => {
@@ -136,7 +136,7 @@ fn test_backup_export_overwrites_existing_file() {
         .expect("export backup should succeed over existing file");
     assert!(backup_path.exists());
 
-    let mut db_dst = Database::open_in_memory().expect("open dst db");
+    let db_dst = Database::open_in_memory().expect("open dst db");
     db_dst
         .restore_backup(&backup_path)
         .expect("restore from overwritten file should succeed");
@@ -148,9 +148,9 @@ fn test_backup_export_overwrites_existing_file() {
 }
 
 #[test]
-fn test_refcell_borrow_safety_during_restore_and_read() {
+fn test_database_shared_restore_without_refcell() {
     let temp_dir =
-        std::env::temp_dir().join(format!("portal_test_borrow_{}", std::process::id()));
+        std::env::temp_dir().join(format!("portal_test_shared_{}", std::process::id()));
     std::fs::create_dir_all(&temp_dir).unwrap();
     let backup_path = temp_dir.join("backup.db");
 
@@ -159,21 +159,13 @@ fn test_refcell_borrow_safety_during_restore_and_read() {
     db_src.create_habit(&habit).unwrap();
     db_src.export_backup(&backup_path).unwrap();
 
-    let db_cell = std::rc::Rc::new(std::cell::RefCell::new(
-        Database::open_in_memory().expect("open target db"),
-    ));
+    let db = std::rc::Rc::new(Database::open_in_memory().expect("open target db"));
 
-    // Simulate the exact flow in trigger_import_dialog:
-    // 1. Scoped borrow_mut for restore_backup
-    let restore_res = {
-        let mut db_guard = db_cell.borrow_mut();
-        db_guard.restore_backup(&backup_path)
-    };
+    // Can call restore_backup on &Database (via Rc<Database> directly) without RefCell or &mut self!
+    let restore_res = db.restore_backup(&backup_path);
     assert!(restore_res.is_ok());
 
-    // 2. Read immediately afterwards (as done by refresh)
-    // If borrow_mut was still held, this would panic with "RefCell already mutably borrowed"
-    let habits = db_cell.borrow().get_habits().unwrap();
+    let habits = db.get_habits().unwrap();
     assert_eq!(habits.len(), 1);
     assert_eq!(habits[0].name, "Morning Routine");
 

@@ -1,8 +1,6 @@
 use chrono::NaiveDate;
 
 #[cfg(feature = "ui")]
-use std::cell::RefCell;
-#[cfg(feature = "ui")]
 use std::path::PathBuf;
 #[cfg(feature = "ui")]
 use std::rc::Rc;
@@ -28,7 +26,7 @@ pub fn default_backup_filename(date: NaiveDate) -> String {
 #[cfg(feature = "ui")]
 pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
-    db: Rc<RefCell<Database>>,
+    db: Rc<Database>,
     on_complete: impl Fn(Result<PathBuf, String>) + 'static,
 ) {
     let filter = gtk4::FileFilter::new();
@@ -55,7 +53,7 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
         move |result| match result {
             Ok(file) => {
                 if let Some(path) = file.path() {
-                    match db.borrow().export_backup(&path) {
+                    match db.export_backup(&path) {
                         Ok(()) => on_complete(Ok(path)),
                         Err(e) => on_complete(Err(e.to_string())),
                     }
@@ -75,7 +73,7 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
 #[cfg(feature = "ui")]
 pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
-    db: Rc<RefCell<Database>>,
+    db: Rc<Database>,
     on_complete: impl Fn(Result<PathBuf, String>) + 'static,
 ) {
     let filter = gtk4::FileFilter::new();
@@ -117,10 +115,7 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
                         None::<&gtk4::gio::Cancellable>,
                         move |response| {
                             if response == "restore" {
-                                let restore_res = {
-                                    let mut db_guard = db_clone.borrow_mut();
-                                    db_guard.restore_backup(&path)
-                                };
+                                let restore_res = db_clone.restore_backup(&path);
                                 gtk4::glib::idle_add_local_once(move || match restore_res {
                                     Ok(()) => on_complete_cb(Ok(path)),
                                     Err(e) => on_complete_cb(Err(e.to_string())),

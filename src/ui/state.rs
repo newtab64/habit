@@ -56,7 +56,7 @@ impl DrawCaches {
 pub struct WindowInner {
     pub nav_view: libadwaita::NavigationView,
     pub details_page: libadwaita::NavigationPage,
-    pub db: Rc<RefCell<Database>>,
+    pub db: Rc<Database>,
     pub selected_habit_id: Option<i64>,
     pub heatmap_week_offset: usize,
     pub habits_list_box: gtk4::Box,
@@ -108,9 +108,8 @@ pub fn handle_toggle(
 ) {
     let (habit, current_entry) = {
         let inner = inner_rc.borrow();
-        let db = inner.db.borrow();
-        let habit = db.get_habit(habit_id).ok().flatten();
-        let entry = db.get_entry(habit_id, date).ok().flatten();
+        let habit = inner.db.get_habit(habit_id).ok().flatten();
+        let entry = inner.db.get_entry(habit_id, date).ok().flatten();
         (habit, entry)
     };
 
@@ -118,7 +117,7 @@ pub fn handle_toggle(
         let (status, val) = toggle_entry_state(&habit, current_entry.as_ref(), val_opt);
         {
             let inner = inner_rc.borrow();
-            let _ = inner.db.borrow().log_entry(habit_id, date, status, val);
+            let _ = inner.db.log_entry(habit_id, date, status, val);
         }
         refresh(inner_rc, caches);
     }
@@ -148,7 +147,7 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     let today = chrono::Local::now().date_naive();
     let mut inner = inner_rc.borrow_mut();
 
-    let habits = inner.db.borrow().get_habits().unwrap_or_default();
+    let habits = inner.db.get_habits().unwrap_or_default();
 
     // Reconcile selected habit
     if inner.selected_habit_id.is_none() && !habits.is_empty() {
@@ -225,7 +224,6 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         let start_bound = NaiveDate::MIN;
         let entries = inner
             .db
-            .borrow()
             .get_entries(habit_id, start_bound, today)
             .unwrap_or_default();
         let score = calculate_habit_score(habit, &entries, today);
@@ -274,7 +272,6 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let start_bound = NaiveDate::MIN;
             let all_entries = inner
                 .db
-                .borrow()
                 .get_entries(sel_id, start_bound, today)
                 .unwrap_or_default();
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
@@ -332,7 +329,6 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let heatmap_start = today - chrono::Duration::weeks(weeks_back);
             let h_entries = inner
                 .db
-                .borrow()
                 .get_entries(sel_id, heatmap_start, today)
                 .unwrap_or_default();
 

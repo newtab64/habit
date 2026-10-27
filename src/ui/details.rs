@@ -402,7 +402,7 @@ pub fn connect_detail_actions(
             let inner = inner_edit.borrow();
             (inner.selected_habit_id, Rc::clone(&inner.db))
         };
-        let habit_opt = selected_id.and_then(|id| db.borrow().get_habit(id).ok().flatten());
+        let habit_opt = selected_id.and_then(|id| db.get_habit(id).ok().flatten());
         if let Some(habit) = habit_opt {
             let inner_saved = Rc::clone(&inner_edit);
             let caches_saved = caches_edit.clone();
@@ -412,7 +412,7 @@ pub fn connect_detail_actions(
                     let inner = inner_saved.borrow();
                     Rc::clone(&inner.db)
                 };
-                if let Err(e) = db.borrow().update_habit(&updated_habit) {
+                if let Err(e) = db.update_habit(&updated_habit) {
                     eprintln!("Failed to update habit: {e}");
                 }
                 {
@@ -433,7 +433,7 @@ pub fn connect_detail_actions(
             (inner.selected_habit_id, Rc::clone(&inner.db))
         };
         if let Some(id) = selected_id {
-            let habit_name = db.borrow().get_habit(id).ok().flatten().map_or_else(|| "this habit".to_string(), |h| h.name);
+            let habit_name = db.get_habit(id).ok().flatten().map_or_else(|| "this habit".to_string(), |h| h.name);
             let alert = libadwaita::AlertDialog::new(
                 Some(&format!("Delete \"{habit_name}\"?")),
                 Some("All completion history and progress data for this habit will be permanently deleted. This action cannot be undone."),
@@ -451,7 +451,7 @@ pub fn connect_detail_actions(
                         let inner = inner_cb.borrow();
                         Rc::clone(&inner.db)
                     };
-                    if let Err(e) = db.borrow().delete_habit(id) {
+                    if let Err(e) = db.delete_habit(id) {
                         eprintln!("Failed to delete habit: {e}");
                     }
                     gtk4::glib::idle_add_local_once(move || {

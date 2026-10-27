@@ -46,7 +46,7 @@ fn connect_controllers(
                 let inner = inner_saved.borrow();
                 Rc::clone(&inner.db)
             };
-            let create_res = db.borrow().create_habit(&new_habit);
+            let create_res = db.create_habit(&new_habit);
             if let Ok(id) = create_res {
                 let (nav_view, details_page) = {
                     let mut inner = inner_saved.borrow_mut();
@@ -229,7 +229,7 @@ impl HabitWindow {
             );
         }
 
-        let db_rc = Rc::new(RefCell::new(db));
+        let db_rc = Rc::new(db);
         let inner = WindowInner {
             nav_view: nav_view.clone(),
             details_page: details.page.clone(),

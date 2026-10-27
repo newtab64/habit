@@ -1,5 +1,6 @@
 use std::fmt;
 use std::path::Path;
+use std::sync::Mutex;
 
 use chrono::NaiveDate;
 use rusqlite::Connection;
@@ -27,6 +28,8 @@ pub enum DbError {
     IntegrityCheckFailed(String),
     /// Backup file is missing required tables.
     InvalidBackupSchema(String),
+    /// Internal database mutex lock was poisoned.
+    LockPoisoned,
     /// File system I/O error.
     Io(std::io::Error),
 }
@@ -47,6 +50,7 @@ impl fmt::Display for DbError {
                 write!(f, "sqlite pragma integrity check failed: {msg}")
             }
             Self::InvalidBackupSchema(msg) => write!(f, "invalid backup schema: {msg}"),
+            Self::LockPoisoned => write!(f, "internal database lock poisoned"),
             Self::Io(err) => write!(f, "i/o error: {err}"),
         }
     }
@@ -84,7 +88,7 @@ impl From<std::io::Error> for DbError {
 /// SQLite persistence manager for habits and daily completion entries.
 #[derive(Debug)]
 pub struct Database {
-    conn: Connection,
+    conn: Mutex<Connection>,
 }
 
 struct TempFileGuard(std::path::PathBuf);
@@ -95,6 +99,7 @@ impl Drop for TempFileGuard {
     }
 }
 
+#[allow(clippy::significant_drop_tightening)]
 impl Database {
     /// Creates and initializes a fresh in-memory SQLite database.
     ///
@@ -104,7 +109,9 @@ impl Database {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         Self::init_tables(&conn)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     /// Opens or creates an on-disk SQLite database at `path` with WAL mode enabled.
@@ -115,7 +122,13 @@ impl Database {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
         Self::init_tables(&conn)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, DbError> {
+        self.conn.lock().map_err(|_| DbError::LockPoisoned)
     }
 
     fn init_tables(conn: &Connection) -> Result<(), DbError> {
@@ -163,7 +176,8 @@ impl Database {
 
         let archived_int: i64 = i64::from(habit.archived);
 
-        self.conn.execute(
+        let conn = self.lock_conn()?;
+        conn.execute(
             "INSERT INTO habits (name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
             rusqlite::params![
@@ -178,7 +192,7 @@ impl Database {
             ],
         )?;
 
-        Ok(self.conn.last_insert_rowid())
+        Ok(conn.last_insert_rowid())
     }
 
     /// Retrieves all habits in the database, ordered by ID ascending.
@@ -186,7 +200,8 @@ impl Database {
     /// # Errors
     /// Returns [`DbError`] if querying or row deserialization fails.
     pub fn get_habits(&self) -> Result<Vec<Habit>, DbError> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
              FROM habits ORDER BY id ASC;",
         )?;
@@ -203,7 +218,8 @@ impl Database {
     /// # Errors
     /// Returns [`DbError`] if querying fails.
     pub fn get_habit(&self, id: i64) -> Result<Option<Habit>, DbError> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
              FROM habits WHERE id = ?1;",
         )?;
@@ -229,7 +245,8 @@ impl Database {
 
         let archived_int: i64 = i64::from(habit.archived);
 
-        let affected = self.conn.execute(
+        let conn = self.lock_conn()?;
+        let affected = conn.execute(
             "UPDATE habits SET
                 name = ?1,
                 habit_type = ?2,
@@ -262,9 +279,8 @@ impl Database {
     /// # Errors
     /// Returns [`DbError::HabitNotFound`] if the habit ID does not exist, or [`DbError::Sqlite`].
     pub fn delete_habit(&self, id: i64) -> Result<(), DbError> {
-        let affected = self
-            .conn
-            .execute("DELETE FROM habits WHERE id = ?1;", rusqlite::params![id])?;
+        let conn = self.lock_conn()?;
+        let affected = conn.execute("DELETE FROM habits WHERE id = ?1;", rusqlite::params![id])?;
         if affected == 0 {
             return Err(DbError::HabitNotFound(id));
         }
@@ -283,7 +299,8 @@ impl Database {
         value: f64,
     ) -> Result<(), DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
-        self.conn.execute(
+        let conn = self.lock_conn()?;
+        conn.execute(
             "INSERT OR REPLACE INTO habit_entries (habit_id, date, entry_status, value)
              VALUES (?1, ?2, ?3, ?4);",
             rusqlite::params![habit_id, date_str, status.as_str(), value],
@@ -297,7 +314,8 @@ impl Database {
     /// Returns [`DbError`] if SQLite execution fails.
     pub fn delete_entry(&self, habit_id: i64, date: NaiveDate) -> Result<(), DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
-        self.conn.execute(
+        let conn = self.lock_conn()?;
+        conn.execute(
             "DELETE FROM habit_entries WHERE habit_id = ?1 AND date = ?2;",
             rusqlite::params![habit_id, date_str],
         )?;
@@ -316,7 +334,8 @@ impl Database {
     ) -> Result<Vec<HabitEntry>, DbError> {
         let from_str = from.format("%Y-%m-%d").to_string();
         let to_str = to.format("%Y-%m-%d").to_string();
-        let mut stmt = self.conn.prepare(
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
             "SELECT habit_id, date, entry_status, value
              FROM habit_entries
              WHERE habit_id = ?1 AND date >= ?2 AND date <= ?3
@@ -336,7 +355,8 @@ impl Database {
     /// Returns [`DbError`] if querying or row deserialization fails.
     pub fn get_entry(&self, habit_id: i64, date: NaiveDate) -> Result<Option<HabitEntry>, DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
-        let mut stmt = self.conn.prepare(
+        let conn = self.lock_conn()?;
+        let mut stmt = conn.prepare(
             "SELECT habit_id, date, entry_status, value
              FROM habit_entries
              WHERE habit_id = ?1 AND date = ?2;",
@@ -369,9 +389,11 @@ impl Database {
         {
             let mut dst_conn = Connection::open(&temp_export)?;
             dst_conn.execute_batch("PRAGMA journal_mode = DELETE;")?;
-            let backup = rusqlite::backup::Backup::new(&self.conn, &mut dst_conn)?;
+            let conn = self.lock_conn()?;
+            let backup = rusqlite::backup::Backup::new(&conn, &mut dst_conn)?;
             backup.run_to_completion(100, std::time::Duration::from_millis(0), None)?;
             drop(backup);
+            drop(conn);
             let _ = dst_conn.execute_batch("PRAGMA vacuum;");
         }
 
@@ -395,7 +417,7 @@ impl Database {
     /// Returns [`DbError::IntegrityCheckFailed`] if SQLite integrity check fails,
     /// [`DbError::InvalidBackupSchema`] if the file is missing or required tables are absent,
     /// or [`DbError::Sqlite`] on restore failure.
-    pub fn restore_backup(&mut self, source_path: &Path) -> Result<(), DbError> {
+    pub fn restore_backup(&self, source_path: &Path) -> Result<(), DbError> {
         if !source_path.is_file() {
             return Err(DbError::InvalidBackupSchema(format!(
                 "Backup path does not exist or is not a regular file: {}",
@@ -443,11 +465,13 @@ impl Database {
         }
 
         {
-            let backup = rusqlite::backup::Backup::new(&src_conn, &mut self.conn)?;
+            let mut conn = self.lock_conn()?;
+            let backup = rusqlite::backup::Backup::new(&src_conn, &mut conn)?;
             backup.run_to_completion(100, std::time::Duration::from_millis(0), None)?;
+            drop(backup);
+            conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         }
 
-        self.conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         Ok(())
     }
 

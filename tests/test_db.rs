@@ -219,7 +219,7 @@ fn test_backup_export_and_restore() {
     assert!(backup_path.exists());
 
     // Restore into a fresh in-memory database
-    let mut db2 = Database::open_in_memory().expect("open db2 failed");
+    let db2 = Database::open_in_memory().expect("open db2 failed");
     assert_eq!(db2.get_habits().unwrap().len(), 0);
 
     db2.restore_backup(&backup_path)
@@ -248,7 +248,7 @@ fn test_restore_validation_failures() {
     let invalid_path = temp_dir.join("garbage.db");
     std::fs::write(&invalid_path, b"not a sqlite database file at all").unwrap();
 
-    let mut db = Database::open_in_memory().unwrap();
+    let db = Database::open_in_memory().unwrap();
     let res = db.restore_backup(&invalid_path);
     assert!(res.is_err(), "restoring non-sqlite file must fail");
 

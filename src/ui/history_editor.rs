@@ -127,7 +127,7 @@ impl HistoryEditorWidgets {
     pub fn open(&self, inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         let (habit_opt, initial_entries) = {
             let inner = inner_rc.borrow();
-            let db = inner.db.borrow();
+            let db = &inner.db;
             let habit_id = inner.selected_habit_id;
             let h = habit_id.and_then(|id| db.get_habit(id).ok().flatten());
             let today = chrono::Local::now().date_naive();
@@ -263,7 +263,7 @@ impl HistoryEditorWidgets {
             };
             let habit = {
                 let inner = inner_click.borrow();
-                let db = inner.db.borrow();
+                let db = &inner.db;
                 db.get_habit(habit_id).ok().flatten()
             };
             let Some(habit) = habit else { return };
@@ -300,7 +300,7 @@ impl HistoryEditorWidgets {
 
                     {
                         let inner = inner_click.borrow();
-                        let db = inner.db.borrow();
+                        let db = &inner.db;
                         if delete_db {
                             let _ = db.delete_entry(habit_id, clicked_date);
                         } else if let Some(status) = new_status {
