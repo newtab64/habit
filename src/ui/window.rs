@@ -500,13 +500,17 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
     }
 
-    // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles)
+    // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles, and seamless bottom-sheet dimming)
     let mut full_css = String::from(
         ".habit-title {\n  font-weight: 700;\n}\n\
          .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n}\n\
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
-         .loop-popup-btn.muted {\n  color: #888888;\n}\n",
+         .loop-popup-btn.muted {\n  color: #888888;\n}\n\
+         dialog.bottom-sheet sheet,\n\
+         dialog.bottom-sheet:not(.narrow) sheet {\n  margin-left: 0;\n  margin-right: 0;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n}\n\
+         bottom-sheet > dimming,\n\
+         floating-sheet > dimming {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n",
     );
     for h in &habits {
         if let Some(hid) = h.id {
@@ -1063,10 +1067,8 @@ fn show_history_editor_dialog(
 
     let dialog = libadwaita::Dialog::builder()
         .title(&habit.name)
-        .content_width(480)
         .content_height(360)
         .presentation_mode(libadwaita::DialogPresentationMode::BottomSheet)
-        .valign(gtk4::Align::End)
         .child(&toolbar_view)
         .build();
 

@@ -378,10 +378,30 @@ fn test_css_parsing_cleanliness() {
             });
             let css = generate_row_css(1, "#3584E4");
             provider.load_from_data(&css);
-            println!("Errors captured: {:?}", errors.borrow());
+            println!("Errors captured for row CSS: {:?}", errors.borrow());
             assert!(
                 errors.borrow().is_empty(),
-                "CSS had parser errors: {:?}",
+                "Row CSS had parser errors: {:?}",
+                errors.borrow()
+            );
+
+            // Also verify the bottom-sheet dimming & seamless docking CSS
+            let sheet_css = "dialog.bottom-sheet sheet,\n\
+                dialog.bottom-sheet:not(.narrow) sheet {\n\
+                  margin-left: 0;\n\
+                  margin-right: 0;\n\
+                  border-bottom-left-radius: 0;\n\
+                  border-bottom-right-radius: 0;\n\
+                }\n\
+                bottom-sheet > dimming,\n\
+                floating-sheet > dimming {\n\
+                  background-color: rgba(0, 0, 0, 0.45);\n\
+                }\n";
+            provider.load_from_data(sheet_css);
+            println!("Errors captured for sheet CSS: {:?}", errors.borrow());
+            assert!(
+                errors.borrow().is_empty(),
+                "Sheet CSS had parser errors: {:?}",
                 errors.borrow()
             );
         }
