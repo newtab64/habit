@@ -14,7 +14,7 @@ import sqlite3
 import sys
 
 SCHEMA_SQL = """
-PRAGMA journal_mode = WAL;
+PRAGMA journal_mode = DELETE;
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS habits (
@@ -137,6 +137,8 @@ def migrate(input_json_path: str, output_db_path: str):
         print(f"  [{habit_id:2d}] {name:<22} | {habit_type:<10} | Target: {target_value}{unit_display} | Color: {accent_color} | {rec_count:3d} entries")
 
     conn.commit()
+    cur.execute("PRAGMA journal_mode = DELETE;")
+    cur.execute("PRAGMA vacuum;")
 
     # Validate database integrity
     integrity = cur.execute("PRAGMA integrity_check;").fetchall()

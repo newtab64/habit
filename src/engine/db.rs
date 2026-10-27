@@ -27,6 +27,8 @@ pub enum DbError {
     IntegrityCheckFailed(String),
     /// Backup file is missing required tables.
     InvalidBackupSchema(String),
+    /// File system I/O error.
+    Io(std::io::Error),
 }
 
 impl fmt::Display for DbError {
@@ -45,6 +47,7 @@ impl fmt::Display for DbError {
                 write!(f, "sqlite pragma integrity check failed: {msg}")
             }
             Self::InvalidBackupSchema(msg) => write!(f, "invalid backup schema: {msg}"),
+            Self::Io(err) => write!(f, "i/o error: {err}"),
         }
     }
 }
@@ -54,6 +57,7 @@ impl std::error::Error for DbError {
         match self {
             Self::Sqlite(err) => Some(err),
             Self::DateParse(err) => Some(err),
+            Self::Io(err) => Some(err),
             _ => None,
         }
     }
@@ -71,10 +75,24 @@ impl From<chrono::ParseError> for DbError {
     }
 }
 
+impl From<std::io::Error> for DbError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+
 /// SQLite persistence manager for habits and daily completion entries.
 #[derive(Debug)]
 pub struct Database {
     conn: Connection,
+}
+
+struct TempFileGuard(std::path::PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 impl Database {
@@ -336,6 +354,27 @@ impl Database {
     /// # Errors
     /// Returns [`DbError`] if opening target or running backup fails.
     pub fn export_backup(&self, target_path: &Path) -> Result<(), DbError> {
+        let temp_dir = std::env::temp_dir();
+        let temp_export = temp_dir.join(format!(
+            "habit_export_{}_{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        let _ = std::fs::remove_file(&temp_export);
+
+        let _guard = TempFileGuard(temp_export.clone());
+
+        {
+            let mut dst_conn = Connection::open(&temp_export)?;
+            dst_conn.execute_batch("PRAGMA journal_mode = DELETE;")?;
+            let backup = rusqlite::backup::Backup::new(&self.conn, &mut dst_conn)?;
+            backup.run_to_completion(100, std::time::Duration::from_millis(0), None)?;
+            drop(backup);
+            let _ = dst_conn.execute_batch("PRAGMA vacuum;");
+        }
+
         if target_path.exists() {
             let _ = std::fs::remove_file(target_path);
             let mut wal_path = target_path.to_path_buf().into_os_string();
@@ -345,9 +384,8 @@ impl Database {
             shm_path.push("-shm");
             let _ = std::fs::remove_file(shm_path);
         }
-        let mut dst_conn = Connection::open(target_path)?;
-        let backup = rusqlite::backup::Backup::new(&self.conn, &mut dst_conn)?;
-        backup.run_to_completion(100, std::time::Duration::from_millis(0), None)?;
+
+        std::fs::copy(&temp_export, target_path)?;
         Ok(())
     }
 
@@ -364,8 +402,27 @@ impl Database {
                 source_path.display()
             )));
         }
-        let src_conn =
-            Connection::open_with_flags(source_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+
+        // Copy source to a temporary file on the local tempfs before opening.
+        // Flatpak portal file paths (/run/user/.../doc/...) reside on FUSE which does
+        // not support SQLite fcntl file locking, causing "disk I/O error".
+        let temp_dir = std::env::temp_dir();
+        let temp_backup = temp_dir.join(format!(
+            "habit_restore_{}_{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        let _ = std::fs::remove_file(&temp_backup);
+        std::fs::copy(source_path, &temp_backup)?;
+
+        let _guard = TempFileGuard(temp_backup.clone());
+
+        let src_conn = Connection::open_with_flags(
+            &temp_backup,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
 
         let integrity: String =
             src_conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0))?;
