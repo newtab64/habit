@@ -10,4 +10,8 @@ vendor/
 _build/
 build/
 .worktrees/
+*.db
+*.db-wal
+*.db-shm
+export-*.json
 
