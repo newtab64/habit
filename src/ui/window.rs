@@ -878,198 +878,224 @@ fn build_details() -> DetailsWidgets {
 
 #[cfg(feature = "ui")]
 #[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
-fn show_heatmap_date_popover(
-    parent_area: &gtk4::DrawingArea,
-    x: f64,
-    y: f64,
+fn show_history_editor_dialog(
+    parent: &gtk4::Window,
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
     habit_id: i64,
-    date: NaiveDate,
 ) {
-    let (habit, current_entry) = {
+    let (habit, initial_entries) = {
         let inner = inner_rc.borrow();
         let db = inner.db.borrow();
         let h = db.get_habit(habit_id).ok().flatten();
-        let e = db.get_entry(habit_id, date).ok().flatten();
+        let today = chrono::Local::now().date_naive();
+        let e = db.get_entries(habit_id, NaiveDate::MIN, today).unwrap_or_default();
         (h, e)
     };
     let Some(habit) = habit else { return };
 
-    let popover = gtk4::Popover::new();
-    popover.set_parent(parent_area);
-    let rect = gtk4::gdk::Rectangle::new(x as i32 - 4, y as i32 - 4, 8, 8);
-    popover.set_pointing_to(Some(&rect));
+    let title = format!("History - {}", habit.name);
+    let dialog = libadwaita::Window::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title(&title)
+        .default_width(520)
+        .default_height(460)
+        .build();
 
-    let pop_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    pop_box.set_margin_start(8);
-    pop_box.set_margin_end(8);
-    pop_box.set_margin_top(6);
-    pop_box.set_margin_bottom(6);
+    let toolbar_view = libadwaita::ToolbarView::new();
 
-    // Date header (Loop Habit Tracker compact style)
-    let date_str = date.format("%a, %b %-d, %Y").to_string();
-    let header_text = if habit.habit_type.is_measurable() {
-        let target = habit.habit_type.target().unwrap_or(1.0);
-        let unit = habit.habit_type.unit().unwrap_or("");
-        format!(
-            "{date_str} (Target: {} {})",
-            crate::ui::habit_row::format_measurable_value(target),
-            unit
-        )
-    } else {
-        date_str
-    };
-    let title_lbl = gtk4::Label::new(Some(&header_text));
-    title_lbl.add_css_class("caption");
-    title_lbl.add_css_class("dim-label");
-    title_lbl.set_halign(gtk4::Align::Center);
-    title_lbl.set_margin_bottom(4);
-    pop_box.append(&title_lbl);
+    let header = libadwaita::HeaderBar::new();
+    let window_title = libadwaita::WindowTitle::new(&habit.name, "Click day to toggle status");
+    header.set_title_widget(Some(&window_title));
 
-    let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    pop_box.append(&sep);
+    let done_btn = gtk4::Button::with_label("Done");
+    done_btn.add_css_class("suggested-action");
+    let dlg_close = dialog.clone();
+    done_btn.connect_clicked(move |_| {
+        dlg_close.close();
+    });
+    header.pack_end(&done_btn);
+    toolbar_view.add_top_bar(&header);
 
-    let cur_status = current_entry.as_ref().map(|e| e.status);
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    content_box.set_margin_start(16);
+    content_box.set_margin_end(16);
+    content_box.set_margin_top(12);
+    content_box.set_margin_bottom(16);
 
-    if habit.habit_type.is_measurable() {
-        let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        btn_box.add_css_class("linked");
-        btn_box.add_css_class("loop-popup-box");
-        btn_box.set_halign(gtk4::Align::Center);
+    // Navigation and legend row
+    let nav_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let nav_btns = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
 
-        let current_val = current_entry.as_ref().map_or(0.0, |e| e.value);
-        let adj = gtk4::Adjustment::new(current_val, 0.0, 100_000.0, 1.0, 5.0, 0.0);
-        let spin = gtk4::SpinButton::new(Some(&adj), 1.0, 1);
-        spin.set_size_request(70, -1);
-        btn_box.append(&spin);
+    let prev_btn = gtk4::Button::from_icon_name("go-previous-symbolic");
+    prev_btn.set_tooltip_text(Some("Earlier Weeks"));
+    nav_btns.append(&prev_btn);
 
-        let save_btn = gtk4::Button::with_label("SAVE");
-        save_btn.add_css_class("suggested-action");
-        save_btn.set_tooltip_text(Some("Save Value"));
-        let inner_save = Rc::clone(inner_rc);
-        let caches_save = caches.clone();
-        let pop_save = popover.clone();
-        let spin_save = spin;
-        save_btn.connect_clicked(move |_| {
-            let val = spin_save.value();
-            pop_save.popdown();
-            handle_toggle(&inner_save, &caches_save, habit_id, date, Some(val));
-        });
-        btn_box.append(&save_btn);
+    let today_btn = gtk4::Button::with_label("Today");
+    today_btn.set_tooltip_text(Some("Jump to Today"));
+    nav_btns.append(&today_btn);
 
-        let skip_btn = gtk4::Button::with_label("SKIP");
-        skip_btn.set_tooltip_text(Some("Rest Day / Skip"));
-        let inner_skip = Rc::clone(inner_rc);
-        let caches_skip = caches.clone();
-        let pop_skip = popover.clone();
-        skip_btn.connect_clicked(move |_| {
-            pop_skip.popdown();
-            handle_toggle(&inner_skip, &caches_skip, habit_id, date, Some(-1.0));
-        });
-        btn_box.append(&skip_btn);
+    let next_btn = gtk4::Button::from_icon_name("go-next-symbolic");
+    next_btn.set_tooltip_text(Some("Newer Weeks"));
+    nav_btns.append(&next_btn);
 
-        let clear_btn = gtk4::Button::with_label("?");
-        clear_btn.add_css_class("flat");
-        clear_btn.set_tooltip_text(Some("Clear / Unrecorded"));
-        let inner_clear = Rc::clone(inner_rc);
-        let caches_clear = caches.clone();
-        let pop_clear = popover.clone();
-        clear_btn.connect_clicked(move |_| {
-            pop_clear.popdown();
-            {
-                let inner = inner_clear.borrow();
-                let _ = inner.db.borrow().delete_entry(habit_id, date);
-            }
-            refresh(&inner_clear, &caches_clear);
-        });
-        btn_box.append(&clear_btn);
+    nav_row.append(&nav_btns);
 
-        pop_box.append(&btn_box);
-    } else {
-        let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
-        btn_box.add_css_class("linked");
-        btn_box.add_css_class("loop-popup-box");
-        btn_box.set_halign(gtk4::Align::Center);
+    let hint_lbl = gtk4::Label::new(Some("✓ Completed  |  ⏸ Rest Day  |  ○ Clear"));
+    hint_lbl.add_css_class("dim-label");
+    hint_lbl.add_css_class("caption");
+    hint_lbl.set_hexpand(true);
+    hint_lbl.set_halign(gtk4::Align::End);
+    nav_row.append(&hint_lbl);
 
-        // 1. Yes / Completed button (fa_check in habit color)
-        let yes_btn = gtk4::Button::with_label("✓");
-        yes_btn.add_css_class("flat");
-        yes_btn.add_css_class("loop-popup-btn");
-        yes_btn.add_css_class(&format!("loop-popup-accent-{habit_id}"));
-        yes_btn.set_tooltip_text(Some("Completed"));
-        if cur_status == Some(EntryStatus::Completed) {
-            yes_btn.add_css_class("suggested-action");
+    content_box.append(&nav_row);
+
+    // Large heatmap drawing area
+    let drawing_area = gtk4::DrawingArea::new();
+    drawing_area.set_size_request(-1, 330);
+    drawing_area.set_hexpand(true);
+    drawing_area.set_vexpand(true);
+    content_box.append(&drawing_area);
+
+    toolbar_view.set_content(Some(&content_box));
+    dialog.set_content(Some(&toolbar_view));
+
+    let week_offset = Rc::new(RefCell::new(0usize));
+    let entries_map = Rc::new(RefCell::new({
+        let mut map = HashMap::new();
+        for e in initial_entries {
+            map.insert(e.date, e.status);
         }
-        let inner_yes = Rc::clone(inner_rc);
-        let caches_yes = caches.clone();
-        let pop_yes = popover.clone();
-        yes_btn.connect_clicked(move |_| {
-            pop_yes.popdown();
-            handle_toggle(&inner_yes, &caches_yes, habit_id, date, Some(1.0));
-        });
-        btn_box.append(&yes_btn);
+        map
+    }));
 
-        // 2. Skip / Rest Day button (fa_skipped in habit color)
-        let skip_btn = gtk4::Button::with_label("⏸");
-        skip_btn.add_css_class("flat");
-        skip_btn.add_css_class("loop-popup-btn");
-        skip_btn.add_css_class(&format!("loop-popup-accent-{habit_id}"));
-        skip_btn.set_tooltip_text(Some("Rest Day / Skip"));
-        if cur_status == Some(EntryStatus::Skipped) {
-            skip_btn.add_css_class("suggested-action");
-        }
-        let inner_skip = Rc::clone(inner_rc);
-        let caches_skip = caches.clone();
-        let pop_skip = popover.clone();
-        skip_btn.connect_clicked(move |_| {
-            pop_skip.popdown();
-            handle_toggle(&inner_skip, &caches_skip, habit_id, date, Some(-1.0));
-        });
-        btn_box.append(&skip_btn);
+    let habit_color = Rgba::from_hex(&habit.accent_color)
+        .unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
 
-        // 3. No / Missed button (fa_times in contrast gray)
-        let no_btn = gtk4::Button::with_label("✕");
-        no_btn.add_css_class("flat");
-        no_btn.add_css_class("loop-popup-btn");
-        no_btn.add_css_class("muted");
-        no_btn.set_tooltip_text(Some("Not Done"));
-        if cur_status == Some(EntryStatus::Missed) {
-            no_btn.add_css_class("destructive-action");
-        }
-        let inner_no = Rc::clone(inner_rc);
-        let caches_no = caches.clone();
-        let pop_no = popover.clone();
-        no_btn.connect_clicked(move |_| {
-            pop_no.popdown();
-            handle_toggle(&inner_no, &caches_no, habit_id, date, Some(0.0));
+    // Drawing func
+    {
+        let week_offset_draw = Rc::clone(&week_offset);
+        let entries_map_draw = Rc::clone(&entries_map);
+        let color_draw = habit_color;
+        drawing_area.set_draw_func(move |_, cr, w, h| {
+            let today = chrono::Local::now().date_naive();
+            let offset = *week_offset_draw.borrow();
+            let entries = entries_map_draw.borrow();
+            draw_loop_heatmap(
+                cr,
+                f64::from(w),
+                f64::from(h),
+                today,
+                offset,
+                &*entries,
+                &color_draw,
+            );
         });
-        btn_box.append(&no_btn);
-
-        // 4. Unknown / Clear button (fa_question in contrast gray)
-        let unknown_btn = gtk4::Button::with_label("?");
-        unknown_btn.add_css_class("flat");
-        unknown_btn.add_css_class("loop-popup-btn");
-        unknown_btn.add_css_class("muted");
-        unknown_btn.set_tooltip_text(Some("Clear / Unrecorded"));
-        let inner_un = Rc::clone(inner_rc);
-        let caches_un = caches.clone();
-        let pop_un = popover.clone();
-        unknown_btn.connect_clicked(move |_| {
-            pop_un.popdown();
-            {
-                let inner = inner_un.borrow();
-                let _ = inner.db.borrow().delete_entry(habit_id, date);
-            }
-            refresh(&inner_un, &caches_un);
-        });
-        btn_box.append(&unknown_btn);
-
-        pop_box.append(&btn_box);
     }
 
-    popover.set_child(Some(&pop_box));
-    popover.popup();
+    // Navigation clicks
+    {
+        let offset_prev = Rc::clone(&week_offset);
+        let area_prev = drawing_area.clone();
+        let next_btn_prev = next_btn.clone();
+        prev_btn.connect_clicked(move |_| {
+            *offset_prev.borrow_mut() += 4;
+            next_btn_prev.set_sensitive(true);
+            area_prev.queue_draw();
+        });
+    }
+    {
+        let offset_today = Rc::clone(&week_offset);
+        let area_today = drawing_area.clone();
+        let next_btn_today = next_btn.clone();
+        today_btn.connect_clicked(move |_| {
+            *offset_today.borrow_mut() = 0;
+            next_btn_today.set_sensitive(false);
+            area_today.queue_draw();
+        });
+    }
+    {
+        let offset_next = Rc::clone(&week_offset);
+        let area_next = drawing_area.clone();
+        let next_btn_next = next_btn.clone();
+        next_btn.connect_clicked(move |_| {
+            let mut off = offset_next.borrow_mut();
+            if *off >= 4 {
+                *off -= 4;
+            } else {
+                *off = 0;
+            }
+            next_btn_next.set_sensitive(*off > 0);
+            drop(off);
+            area_next.queue_draw();
+        });
+    }
+    next_btn.set_sensitive(false);
+
+    // Click gesture to directly toggle entry status
+    let gesture = gtk4::GestureClick::new();
+    {
+        let offset_click = Rc::clone(&week_offset);
+        let entries_click = Rc::clone(&entries_map);
+        let area_click = drawing_area.clone();
+        let inner_click = Rc::clone(inner_rc);
+        let caches_click = caches.clone();
+        let target_val = habit.habit_type.target().unwrap_or(1.0);
+
+        gesture.connect_pressed(move |_, _, x, y| {
+            let width = f64::from(area_click.width());
+            let height = f64::from(area_click.height());
+            let today = chrono::Local::now().date_naive();
+            let offset = *offset_click.borrow();
+            if let Some(clicked_date) =
+                loop_heatmap_hit_test(x, y, width, height, today, offset)
+            {
+                if clicked_date <= today {
+                    let cur_status = entries_click.borrow().get(&clicked_date).copied();
+                    let (new_status, new_val) = match cur_status {
+                        None | Some(EntryStatus::Missed) => {
+                            (Some(EntryStatus::Completed), target_val)
+                        }
+                        Some(EntryStatus::Completed) => {
+                            (Some(EntryStatus::Skipped), 0.0)
+                        }
+                        Some(EntryStatus::Skipped) => {
+                            (None, 0.0)
+                        }
+                    };
+
+                    {
+                        let inner = inner_click.borrow();
+                        let db = inner.db.borrow();
+                        if let Some(status) = new_status {
+                            let _ = db.log_entry(habit_id, clicked_date, status, new_val);
+                            entries_click.borrow_mut().insert(clicked_date, status);
+                        } else {
+                            let _ = db.delete_entry(habit_id, clicked_date);
+                            entries_click.borrow_mut().remove(&clicked_date);
+                        }
+                    }
+
+                    area_click.queue_draw();
+                    refresh(&inner_click, &caches_click);
+                }
+            }
+        });
+    }
+    drawing_area.add_controller(gesture);
+
+    // When dialog closes, ensure main window is completely refreshed
+    {
+        let inner_close = Rc::clone(inner_rc);
+        let caches_close = caches.clone();
+        dialog.connect_close_request(move |_| {
+            refresh(&inner_close, &caches_close);
+            gtk4::glib::Propagation::Proceed
+        });
+    }
+
+    dialog.present();
 }
 
 #[cfg(feature = "ui")]
@@ -1113,55 +1139,27 @@ fn connect_controllers(
 
     let inner_edit_btn = Rc::clone(inner_rc);
     let caches_edit_btn = caches.clone();
-    let area_edit_weak = details.heatmap_drawing_area.downgrade();
+    let win_edit = root_window.clone();
     details.edit_mode_btn.connect_clicked(move |_| {
-        let Some(area) = area_edit_weak.upgrade() else { return };
         let selected_id = inner_edit_btn.borrow().selected_habit_id;
         if let Some(habit_id) = selected_id {
-            let today = chrono::Local::now().date_naive();
-            show_heatmap_date_popover(
-                &area,
-                f64::from(area.width()) / 2.0,
-                f64::from(area.height()) / 2.0,
-                &inner_edit_btn,
-                &caches_edit_btn,
-                habit_id,
-                today,
-            );
+            show_history_editor_dialog(&win_edit, &inner_edit_btn, &caches_edit_btn, habit_id);
         }
     });
 
     let heatmap_gesture = gtk4::GestureClick::new();
     let inner_gesture = Rc::clone(inner_rc);
     let caches_gesture = caches.clone();
-    let area_weak = details.heatmap_drawing_area.downgrade();
-    heatmap_gesture.connect_pressed(move |_, _, x, y| {
-        let Some(area) = area_weak.upgrade() else {
-            return;
-        };
-        let width = f64::from(area.width());
-        let height = f64::from(area.height());
-        let (selected_id, week_offset) = {
-            let inner = inner_gesture.borrow();
-            (inner.selected_habit_id, inner.heatmap_week_offset)
-        };
+    let win_gesture = root_window.clone();
+    heatmap_gesture.connect_pressed(move |_, _, _, _| {
+        let selected_id = inner_gesture.borrow().selected_habit_id;
         if let Some(habit_id) = selected_id {
-            let today = chrono::Local::now().date_naive();
-            if let Some(clicked_date) =
-                loop_heatmap_hit_test(x, y, width, height, today, week_offset)
-            {
-                if clicked_date <= today {
-                    show_heatmap_date_popover(
-                        &area,
-                        x,
-                        y,
-                        &inner_gesture,
-                        &caches_gesture,
-                        habit_id,
-                        clicked_date,
-                    );
-                }
-            }
+            show_history_editor_dialog(
+                &win_gesture,
+                &inner_gesture,
+                &caches_gesture,
+                habit_id,
+            );
         }
     });
     details.heatmap_drawing_area.add_controller(heatmap_gesture);
