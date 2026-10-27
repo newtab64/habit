@@ -273,6 +273,19 @@ impl Database {
         Ok(())
     }
 
+    /// Deletes an entry for the given habit and date (marking it unrecorded).
+    ///
+    /// # Errors
+    /// Returns [`DbError`] if SQLite execution fails.
+    pub fn delete_entry(&self, habit_id: i64, date: NaiveDate) -> Result<(), DbError> {
+        let date_str = date.format("%Y-%m-%d").to_string();
+        self.conn.execute(
+            "DELETE FROM habit_entries WHERE habit_id = ?1 AND date = ?2;",
+            rusqlite::params![habit_id, date_str],
+        )?;
+        Ok(())
+    }
+
     /// Retrieves entries for a habit within the inclusive date range `[from, to]`.
     ///
     /// # Errors

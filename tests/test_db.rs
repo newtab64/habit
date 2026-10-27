@@ -130,6 +130,15 @@ fn test_atomic_entry_logging_and_queries() {
     // Empty range
     let empty_range = db.get_entries(id, day3, day1).expect("range query failed");
     assert_eq!(empty_range.len(), 0);
+
+    // Delete entry (unrecorded)
+    db.delete_entry(id, day2).expect("delete_entry failed");
+    let deleted_entry = db.get_entry(id, day2).expect("get_entry failed");
+    assert!(deleted_entry.is_none());
+    let remaining = db.get_entries(id, day1, day3).expect("range query failed");
+    assert_eq!(remaining.len(), 2);
+    assert_eq!(remaining[0].date, day1);
+    assert_eq!(remaining[1].date, day3);
 }
 
 #[test]

@@ -443,7 +443,11 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
 
     // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles)
     let mut full_css = String::from(
-        ".habit-title {\n  font-weight: 700;\n}\n.day-symbol {\n  font-size: 18px;\n  font-weight: bold;\n}\n",
+        ".habit-title {\n  font-weight: 700;\n}\n\
+         .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n}\n\
+         .loop-popup-box {\n  min-width: 200px;\n}\n\
+         .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
+         .loop-popup-btn.muted {\n  color: #888888;\n}\n",
     );
     for h in &habits {
         if let Some(hid) = h.id {
@@ -627,8 +631,8 @@ fn build_sidebar() -> SidebarWidgets {
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
-    // Quick-check column headers with compact gap 8
-    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    // Quick-check column headers with compact gap 6
+    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
     quick_check_header.set_margin_top(8);
@@ -641,7 +645,7 @@ fn build_sidebar() -> SidebarWidgets {
     habit_score_label.add_css_class("caption");
     quick_check_header.append(&habit_score_label);
 
-    let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
     days_header_box.set_halign(gtk4::Align::End);
     let today = chrono::Local::now().date_naive();
     let dates = crate::ui::habit_row::calculate_5_day_dates(today);
@@ -651,7 +655,7 @@ fn build_sidebar() -> SidebarWidgets {
         let lbl = gtk4::Label::new(Some(&date_str));
         lbl.add_css_class("dim-label");
         lbl.add_css_class("caption");
-        lbl.set_size_request(44, -1);
+        lbl.set_size_request(50, -1);
         lbl.set_halign(gtk4::Align::Center);
         days_header_box.append(&lbl);
         header_day_labels.push(lbl);
@@ -897,129 +901,169 @@ fn show_heatmap_date_popover(
     let rect = gtk4::gdk::Rectangle::new(x as i32 - 4, y as i32 - 4, 8, 8);
     popover.set_pointing_to(Some(&rect));
 
-    let pop_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    pop_box.set_margin_start(14);
-    pop_box.set_margin_end(14);
-    pop_box.set_margin_top(12);
-    pop_box.set_margin_bottom(12);
+    let pop_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+    pop_box.set_margin_start(8);
+    pop_box.set_margin_end(8);
+    pop_box.set_margin_top(6);
+    pop_box.set_margin_bottom(6);
 
-    // Title: Date string (e.g. "Tuesday, Oct 27, 2026")
-    let title = gtk4::Label::new(Some(&date.format("%A, %b %e, %Y").to_string()));
-    title.add_css_class("heading");
-    title.set_halign(gtk4::Align::Center);
-    pop_box.append(&title);
-
-    let cur_status = current_entry.as_ref().map(|e| e.status);
-    let status_desc = match cur_status {
-        Some(EntryStatus::Completed) => "Status: Completed",
-        Some(EntryStatus::Skipped) => "Status: Rest Day",
-        Some(EntryStatus::Missed) => "Status: Not Done",
-        None => "Status: Unrecorded",
+    // Date header (Loop Habit Tracker compact style)
+    let date_str = date.format("%a, %b %-d, %Y").to_string();
+    let header_text = if habit.habit_type.is_measurable() {
+        let target = habit.habit_type.target().unwrap_or(1.0);
+        let unit = habit.habit_type.unit().unwrap_or("");
+        format!(
+            "{date_str} (Target: {} {})",
+            crate::ui::habit_row::format_measurable_value(target),
+            unit
+        )
+    } else {
+        date_str
     };
-    let status_lbl = gtk4::Label::new(Some(status_desc));
-    status_lbl.add_css_class("dim-label");
-    status_lbl.add_css_class("caption");
-    status_lbl.set_halign(gtk4::Align::Center);
-    pop_box.append(&status_lbl);
+    let title_lbl = gtk4::Label::new(Some(&header_text));
+    title_lbl.add_css_class("caption");
+    title_lbl.add_css_class("dim-label");
+    title_lbl.set_halign(gtk4::Align::Center);
+    title_lbl.set_margin_bottom(4);
+    pop_box.append(&title_lbl);
 
     let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     pop_box.append(&sep);
 
+    let cur_status = current_entry.as_ref().map(|e| e.status);
+
     if habit.habit_type.is_measurable() {
-        let target = habit.habit_type.target().unwrap_or(1.0);
-        let unit = habit.habit_type.unit().unwrap_or("");
-        let target_lbl = gtk4::Label::new(Some(&format!(
-            "Target: {} {}",
-            crate::ui::habit_row::format_measurable_value(target),
-            unit
-        )));
-        target_lbl.add_css_class("caption");
-        target_lbl.set_halign(gtk4::Align::Center);
-        pop_box.append(&target_lbl);
+        let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        btn_box.add_css_class("linked");
+        btn_box.add_css_class("loop-popup-box");
+        btn_box.set_halign(gtk4::Align::Center);
 
         let current_val = current_entry.as_ref().map_or(0.0, |e| e.value);
         let adj = gtk4::Adjustment::new(current_val, 0.0, 100_000.0, 1.0, 5.0, 0.0);
         let spin = gtk4::SpinButton::new(Some(&adj), 1.0, 1);
-        pop_box.append(&spin);
+        spin.set_size_request(70, -1);
+        btn_box.append(&spin);
 
-        let actions_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-        actions_box.set_halign(gtk4::Align::Center);
-
-        let log_btn = gtk4::Button::with_label("Log");
-        log_btn.add_css_class("suggested-action");
-        let inner_log = Rc::clone(inner_rc);
-        let caches_log = caches.clone();
-        let pop_log = popover.clone();
-        let spin_log = spin;
-        log_btn.connect_clicked(move |_| {
-            let val = spin_log.value();
-            pop_log.popdown();
-            handle_toggle(&inner_log, &caches_log, habit_id, date, Some(val));
+        let save_btn = gtk4::Button::with_label("SAVE");
+        save_btn.add_css_class("suggested-action");
+        save_btn.set_tooltip_text(Some("Save Value"));
+        let inner_save = Rc::clone(inner_rc);
+        let caches_save = caches.clone();
+        let pop_save = popover.clone();
+        let spin_save = spin;
+        save_btn.connect_clicked(move |_| {
+            let val = spin_save.value();
+            pop_save.popdown();
+            handle_toggle(&inner_save, &caches_save, habit_id, date, Some(val));
         });
-        actions_box.append(&log_btn);
+        btn_box.append(&save_btn);
 
-        let rest_btn = gtk4::Button::with_label("⏸ Rest");
-        let inner_rest = Rc::clone(inner_rc);
-        let caches_rest = caches.clone();
-        let pop_rest = popover.clone();
-        rest_btn.connect_clicked(move |_| {
-            pop_rest.popdown();
-            handle_toggle(&inner_rest, &caches_rest, habit_id, date, Some(-1.0));
+        let skip_btn = gtk4::Button::with_label("SKIP");
+        skip_btn.set_tooltip_text(Some("Rest Day / Skip"));
+        let inner_skip = Rc::clone(inner_rc);
+        let caches_skip = caches.clone();
+        let pop_skip = popover.clone();
+        skip_btn.connect_clicked(move |_| {
+            pop_skip.popdown();
+            handle_toggle(&inner_skip, &caches_skip, habit_id, date, Some(-1.0));
         });
-        actions_box.append(&rest_btn);
+        btn_box.append(&skip_btn);
 
-        let clear_btn = gtk4::Button::with_label("○ Clear");
+        let clear_btn = gtk4::Button::with_label("?");
+        clear_btn.add_css_class("flat");
+        clear_btn.set_tooltip_text(Some("Clear / Unrecorded"));
         let inner_clear = Rc::clone(inner_rc);
         let caches_clear = caches.clone();
         let pop_clear = popover.clone();
         clear_btn.connect_clicked(move |_| {
             pop_clear.popdown();
-            handle_toggle(&inner_clear, &caches_clear, habit_id, date, Some(0.0));
+            {
+                let inner = inner_clear.borrow();
+                let _ = inner.db.borrow().delete_entry(habit_id, date);
+            }
+            refresh(&inner_clear, &caches_clear);
         });
-        actions_box.append(&clear_btn);
+        btn_box.append(&clear_btn);
 
-        pop_box.append(&actions_box);
+        pop_box.append(&btn_box);
     } else {
-        let btn_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+        let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        btn_box.add_css_class("linked");
+        btn_box.add_css_class("loop-popup-box");
+        btn_box.set_halign(gtk4::Align::Center);
 
-        let complete_btn = gtk4::Button::with_label("✓  Completed");
+        // 1. Yes / Completed button (fa_check in habit color)
+        let yes_btn = gtk4::Button::with_label("✓");
+        yes_btn.add_css_class("flat");
+        yes_btn.add_css_class("loop-popup-btn");
+        yes_btn.add_css_class(&format!("loop-popup-accent-{habit_id}"));
+        yes_btn.set_tooltip_text(Some("Completed"));
         if cur_status == Some(EntryStatus::Completed) {
-            complete_btn.add_css_class("suggested-action");
+            yes_btn.add_css_class("suggested-action");
         }
-        let inner_comp = Rc::clone(inner_rc);
-        let caches_comp = caches.clone();
-        let pop_comp = popover.clone();
-        complete_btn.connect_clicked(move |_| {
-            pop_comp.popdown();
-            handle_toggle(&inner_comp, &caches_comp, habit_id, date, Some(1.0));
+        let inner_yes = Rc::clone(inner_rc);
+        let caches_yes = caches.clone();
+        let pop_yes = popover.clone();
+        yes_btn.connect_clicked(move |_| {
+            pop_yes.popdown();
+            handle_toggle(&inner_yes, &caches_yes, habit_id, date, Some(1.0));
         });
-        btn_box.append(&complete_btn);
+        btn_box.append(&yes_btn);
 
-        let rest_btn = gtk4::Button::with_label("⏸  Rest Day");
+        // 2. Skip / Rest Day button (fa_skipped in habit color)
+        let skip_btn = gtk4::Button::with_label("⏸");
+        skip_btn.add_css_class("flat");
+        skip_btn.add_css_class("loop-popup-btn");
+        skip_btn.add_css_class(&format!("loop-popup-accent-{habit_id}"));
+        skip_btn.set_tooltip_text(Some("Rest Day / Skip"));
         if cur_status == Some(EntryStatus::Skipped) {
-            rest_btn.add_css_class("suggested-action");
+            skip_btn.add_css_class("suggested-action");
         }
-        let inner_rest = Rc::clone(inner_rc);
-        let caches_rest = caches.clone();
-        let pop_rest = popover.clone();
-        rest_btn.connect_clicked(move |_| {
-            pop_rest.popdown();
-            handle_toggle(&inner_rest, &caches_rest, habit_id, date, Some(-1.0));
+        let inner_skip = Rc::clone(inner_rc);
+        let caches_skip = caches.clone();
+        let pop_skip = popover.clone();
+        skip_btn.connect_clicked(move |_| {
+            pop_skip.popdown();
+            handle_toggle(&inner_skip, &caches_skip, habit_id, date, Some(-1.0));
         });
-        btn_box.append(&rest_btn);
+        btn_box.append(&skip_btn);
 
-        let missed_btn = gtk4::Button::with_label("○  Not Done");
-        if cur_status == Some(EntryStatus::Missed) || cur_status.is_none() {
-            missed_btn.add_css_class("flat");
+        // 3. No / Missed button (fa_times in contrast gray)
+        let no_btn = gtk4::Button::with_label("✕");
+        no_btn.add_css_class("flat");
+        no_btn.add_css_class("loop-popup-btn");
+        no_btn.add_css_class("muted");
+        no_btn.set_tooltip_text(Some("Not Done"));
+        if cur_status == Some(EntryStatus::Missed) {
+            no_btn.add_css_class("destructive-action");
         }
-        let inner_missed = Rc::clone(inner_rc);
-        let caches_missed = caches.clone();
-        let pop_missed = popover.clone();
-        missed_btn.connect_clicked(move |_| {
-            pop_missed.popdown();
-            handle_toggle(&inner_missed, &caches_missed, habit_id, date, Some(0.0));
+        let inner_no = Rc::clone(inner_rc);
+        let caches_no = caches.clone();
+        let pop_no = popover.clone();
+        no_btn.connect_clicked(move |_| {
+            pop_no.popdown();
+            handle_toggle(&inner_no, &caches_no, habit_id, date, Some(0.0));
         });
-        btn_box.append(&missed_btn);
+        btn_box.append(&no_btn);
+
+        // 4. Unknown / Clear button (fa_question in contrast gray)
+        let unknown_btn = gtk4::Button::with_label("?");
+        unknown_btn.add_css_class("flat");
+        unknown_btn.add_css_class("loop-popup-btn");
+        unknown_btn.add_css_class("muted");
+        unknown_btn.set_tooltip_text(Some("Clear / Unrecorded"));
+        let inner_un = Rc::clone(inner_rc);
+        let caches_un = caches.clone();
+        let pop_un = popover.clone();
+        unknown_btn.connect_clicked(move |_| {
+            pop_un.popdown();
+            {
+                let inner = inner_un.borrow();
+                let _ = inner.db.borrow().delete_entry(habit_id, date);
+            }
+            refresh(&inner_un, &caches_un);
+        });
+        btn_box.append(&unknown_btn);
 
         pop_box.append(&btn_box);
     }
