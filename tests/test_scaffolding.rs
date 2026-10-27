@@ -19,6 +19,18 @@ fn test_flatpak_manifest_sandbox_safety() {
         !manifest_str.contains("--filesystem=home"),
         "Must not request home filesystem"
     );
+    assert!(
+        !manifest_str.contains("--socket=fallback-x11"),
+        "Must not request fallback-x11 socket permission"
+    );
+    assert!(
+        !manifest_str.contains("--socket=x11"),
+        "Must not request x11 socket permission"
+    );
+    assert!(
+        manifest_str.contains("--socket=wayland"),
+        "Must request wayland socket permission"
+    );
     assert!(manifest_str.contains("\"app-id\": \"io.github.habit.Habit\""));
     assert!(manifest_str.contains("\"runtime-version\": \"50\""));
     assert!(manifest_str.contains("\"runtime\": \"org.gnome.Platform\""));

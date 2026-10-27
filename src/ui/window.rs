@@ -327,8 +327,13 @@ impl AsRef<gtk4::Widget> for HabitWindow {
 }
 
 /// Application entry point: initializes libadwaita and launches `HabitWindow`.
+///
+/// Configured to run exclusively on Wayland sessions with no X11/Xorg fallback.
 #[cfg(feature = "ui")]
 pub fn run_app() {
+    // Enforce Wayland session only; prevent X11/Xorg fallback
+    std::env::set_var("GDK_BACKEND", "wayland");
+
     let app = libadwaita::Application::builder()
         .application_id(crate::APP_ID)
         .build();

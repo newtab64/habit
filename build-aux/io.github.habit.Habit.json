@@ -9,7 +9,6 @@
   "command": "habit",
   "finish-args": [
     "--socket=wayland",
-    "--socket=fallback-x11",
     "--share=ipc"
   ],
   "build-options": {
