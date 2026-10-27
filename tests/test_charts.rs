@@ -1,7 +1,8 @@
 use chrono::{Datelike, NaiveDate};
 use habit::ui::charts::{
-    calculate_curve_points, calculate_loop_heatmap_layout, days_in_month, heatmap_cell_rect,
-    heatmap_hit_test, loop_heatmap_cell_rect, loop_heatmap_hit_test, Point, Rect, Rgba,
+    calculate_curve_points, calculate_loop_heatmap_layout, days_in_month, draw_progress_ring,
+    heatmap_cell_rect, heatmap_hit_test, loop_heatmap_cell_rect, loop_heatmap_hit_test, Point,
+    Rect, Rgba,
 };
 
 #[test]
@@ -422,4 +423,30 @@ fn test_loop_heatmap_hit_test_today_and_past() {
         loop_heatmap_hit_test(500.0, 50.0, width, height, today, 0),
         None
     );
+}
+
+#[cfg(feature = "ui")]
+#[test]
+fn test_draw_progress_ring() {
+    let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, 40, 40)
+        .expect("Failed to create test image surface");
+    let cr = gtk4::cairo::Context::new(&surface).expect("Failed to create cairo context");
+    let color = Rgba::new(0.2, 0.6, 1.0, 1.0);
+
+    // 1. Standard 50% progress
+    draw_progress_ring(&cr, 40.0, 40.0, 0.5, &color);
+
+    // 2. 0% progress
+    draw_progress_ring(&cr, 40.0, 40.0, 0.0, &color);
+
+    // 3. 100% progress
+    draw_progress_ring(&cr, 40.0, 40.0, 1.0, &color);
+
+    // 4. Clamping bounds: negative progress clamped to 0, > 1.0 clamped to 1.0
+    draw_progress_ring(&cr, 40.0, 40.0, -0.25, &color);
+    draw_progress_ring(&cr, 40.0, 40.0, 2.5, &color);
+
+    // 5. Zero / negative dimension safety
+    draw_progress_ring(&cr, 0.0, 40.0, 0.5, &color);
+    draw_progress_ring(&cr, 40.0, -5.0, 0.5, &color);
 }
