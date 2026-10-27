@@ -386,16 +386,19 @@ fn test_css_parsing_cleanliness() {
             );
 
             // Also verify the bottom-sheet dimming & seamless docking CSS
-            let sheet_css = "dialog.bottom-sheet sheet,\n\
-                dialog.bottom-sheet:not(.narrow) sheet {\n\
-                  margin-left: 0;\n\
-                  margin-right: 0;\n\
+            let sheet_css = ".editor-dimming-backdrop {\n\
+                  background-color: rgba(0, 0, 0, 0.45);\n\
+                }\n\
+                .editor-bottom-sheet {\n\
+                  background-color: var(--window-bg-color);\n\
+                  border-top-left-radius: 16px;\n\
+                  border-top-right-radius: 16px;\n\
                   border-bottom-left-radius: 0;\n\
                   border-bottom-right-radius: 0;\n\
-                }\n\
-                bottom-sheet > dimming,\n\
-                floating-sheet > dimming {\n\
-                  background-color: rgba(0, 0, 0, 0.45);\n\
+                  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n\
+                  margin-left: 0;\n\
+                  margin-right: 0;\n\
+                  margin-bottom: 0;\n\
                 }\n";
             provider.load_from_data(sheet_css);
             println!("Errors captured for sheet CSS: {:?}", errors.borrow());

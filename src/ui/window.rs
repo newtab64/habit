@@ -351,6 +351,10 @@ struct DrawCaches {
     heatmap_today: Rc<RefCell<NaiveDate>>,
     overview_score: Rc<RefCell<f64>>,
     overview_color: Rc<RefCell<Rgba>>,
+    editor_entries: Rc<RefCell<HashMap<NaiveDate, EntryStatus>>>,
+    editor_week_offset: Rc<RefCell<usize>>,
+    editor_color: Rc<RefCell<Rgba>>,
+    editor_habit_id: Rc<RefCell<Option<i64>>>,
 }
 
 #[cfg(feature = "ui")]
@@ -410,6 +414,11 @@ struct DetailsWidgets {
     next_week_btn: gtk4::Button,
     edit_mode_btn: gtk4::Button,
     heatmap_drawing_area: gtk4::DrawingArea,
+    editor_container: gtk4::Box,
+    editor_dimming: gtk4::Box,
+    editor_title: libadwaita::WindowTitle,
+    editor_close_btn: gtk4::Button,
+    editor_drawing_area: gtk4::DrawingArea,
 }
 
 #[cfg(feature = "ui")]
@@ -507,10 +516,8 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-         dialog.bottom-sheet sheet,\n\
-         dialog.bottom-sheet:not(.narrow) sheet {\n  margin-left: 0;\n  margin-right: 0;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n}\n\
-         bottom-sheet > dimming,\n\
-         floating-sheet > dimming {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n",
+         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 0;\n  margin-right: 0;\n  margin-bottom: 0;\n}\n",
     );
     for h in &habits {
         if let Some(hid) = h.id {
@@ -911,6 +918,7 @@ fn build_heatmap_section() -> (
 }
 
 #[cfg(feature = "ui")]
+#[allow(clippy::too_many_lines)]
 fn build_details() -> DetailsWidgets {
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
@@ -1000,7 +1008,51 @@ fn build_details() -> DetailsWidgets {
     details_scrolled.set_child(Some(&details_vbox));
     content_box.append(&details_scrolled);
 
-    let page = libadwaita::NavigationPage::new(&content_box, "Details");
+    let overlay = gtk4::Overlay::new();
+    overlay.set_child(Some(&content_box));
+
+    let editor_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    editor_container.set_visible(false);
+
+    let editor_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    editor_dimming.set_vexpand(true);
+    editor_dimming.set_hexpand(true);
+    editor_dimming.add_css_class("editor-dimming-backdrop");
+    editor_container.append(&editor_dimming);
+
+    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    sheet_box.set_valign(gtk4::Align::End);
+    sheet_box.set_hexpand(true);
+    sheet_box.add_css_class("editor-bottom-sheet");
+
+    let sheet_header = libadwaita::HeaderBar::new();
+    sheet_header.set_show_start_title_buttons(false);
+    sheet_header.set_show_end_title_buttons(false);
+    let editor_title = libadwaita::WindowTitle::new("Edit History", "");
+    sheet_header.set_title_widget(Some(&editor_title));
+
+    let editor_close_btn = gtk4::Button::from_icon_name("window-close-symbolic");
+    editor_close_btn.add_css_class("flat");
+    editor_close_btn.set_tooltip_text(Some("Close"));
+    sheet_header.pack_end(&editor_close_btn);
+    sheet_box.append(&sheet_header);
+
+    let sheet_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    sheet_content.set_margin_start(12);
+    sheet_content.set_margin_end(12);
+    sheet_content.set_margin_top(8);
+    sheet_content.set_margin_bottom(12);
+
+    let editor_drawing_area = gtk4::DrawingArea::new();
+    editor_drawing_area.set_content_height(280);
+    editor_drawing_area.set_hexpand(true);
+    sheet_content.append(&editor_drawing_area);
+    sheet_box.append(&sheet_content);
+
+    editor_container.append(&sheet_box);
+    overlay.add_overlay(&editor_container);
+
+    let page = libadwaita::NavigationPage::new(&overlay, "Details");
     page.set_tag(Some("details"));
 
     DetailsWidgets {
@@ -1021,208 +1073,12 @@ fn build_details() -> DetailsWidgets {
         next_week_btn,
         edit_mode_btn,
         heatmap_drawing_area,
+        editor_container,
+        editor_dimming,
+        editor_title,
+        editor_close_btn,
+        editor_drawing_area,
     }
-}
-
-#[cfg(feature = "ui")]
-#[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
-fn show_history_editor_dialog(
-    parent: &gtk4::Window,
-    inner_rc: &Rc<RefCell<WindowInner>>,
-    caches: &DrawCaches,
-    habit_id: i64,
-) {
-    let (habit, initial_entries) = {
-        let inner = inner_rc.borrow();
-        let db = inner.db.borrow();
-        let h = db.get_habit(habit_id).ok().flatten();
-        let today = chrono::Local::now().date_naive();
-        let start_date = today - chrono::Duration::weeks(104);
-        let e = db.get_entries(habit_id, start_date, today).unwrap_or_default();
-        (h, e)
-    };
-    let Some(habit) = habit else { return };
-
-    let toolbar_view = libadwaita::ToolbarView::new();
-
-    let header = libadwaita::HeaderBar::new();
-    let window_title = libadwaita::WindowTitle::new(&habit.name, "");
-    header.set_title_widget(Some(&window_title));
-    toolbar_view.add_top_bar(&header);
-
-    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    content_box.set_margin_start(12);
-    content_box.set_margin_end(12);
-    content_box.set_margin_top(8);
-    content_box.set_margin_bottom(12);
-
-    // Large heatmap drawing area
-    let drawing_area = gtk4::DrawingArea::new();
-    drawing_area.set_size_request(-1, 280);
-    drawing_area.set_hexpand(true);
-    drawing_area.set_vexpand(true);
-    content_box.append(&drawing_area);
-
-    toolbar_view.set_content(Some(&content_box));
-
-    let dialog = libadwaita::Dialog::builder()
-        .title(&habit.name)
-        .content_height(360)
-        .presentation_mode(libadwaita::DialogPresentationMode::BottomSheet)
-        .child(&toolbar_view)
-        .build();
-
-    let week_offset = Rc::new(RefCell::new(0usize));
-    let entries_map = Rc::new(RefCell::new({
-        let today = chrono::Local::now().date_naive();
-        let start_date = today - chrono::Duration::weeks(104);
-        let mut map = HashMap::with_capacity(initial_entries.len() + 104 * 7);
-        for e in initial_entries {
-            map.insert(e.date, e.status);
-        }
-        let mut cur = start_date;
-        while cur <= today {
-            if !map.contains_key(&cur) && !habit.is_scheduled_on(cur.weekday()) {
-                map.insert(cur, EntryStatus::Skipped);
-            }
-            cur += chrono::Duration::days(1);
-        }
-        map
-    }));
-
-    let habit_color = Rgba::from_hex(&habit.accent_color)
-        .unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
-
-    // Drawing func
-    {
-        let week_offset_draw = Rc::clone(&week_offset);
-        let entries_map_draw = Rc::clone(&entries_map);
-        let color_draw = habit_color;
-        drawing_area.set_draw_func(move |_, cr, w, h| {
-            let today = chrono::Local::now().date_naive();
-            let offset = *week_offset_draw.borrow();
-            let entries = entries_map_draw.borrow();
-            draw_loop_heatmap(
-                cr,
-                f64::from(w),
-                f64::from(h),
-                today,
-                offset,
-                &*entries,
-                &color_draw,
-            );
-        });
-    }
-
-    // Scroll controller for mouse wheel / touchpad week scrolling
-    let scroll = gtk4::EventControllerScroll::new(
-        gtk4::EventControllerScrollFlags::VERTICAL | gtk4::EventControllerScrollFlags::HORIZONTAL,
-    );
-    {
-        let offset_scroll = Rc::clone(&week_offset);
-        let area_scroll = drawing_area.clone();
-        scroll.connect_scroll(move |_, dx, dy| {
-            let delta = if dy.abs() > dx.abs() { dy } else { dx };
-            let mut off = offset_scroll.borrow_mut();
-            if delta > 0.0 {
-                *off = (*off + 2).min(104);
-            } else if delta < 0.0 {
-                *off = off.saturating_sub(2);
-            }
-            drop(off);
-            area_scroll.queue_draw();
-            gtk4::glib::Propagation::Stop
-        });
-    }
-    drawing_area.add_controller(scroll);
-
-    // Click gesture to directly toggle entry status
-    let gesture = gtk4::GestureClick::new();
-    {
-        let offset_click = Rc::clone(&week_offset);
-        let entries_click = Rc::clone(&entries_map);
-        let area_click = drawing_area.clone();
-        let inner_click = Rc::clone(inner_rc);
-        let caches_click = caches.clone();
-        let target_val = habit.habit_type.target().unwrap_or(1.0);
-
-        gesture.connect_pressed(move |_, _, x, y| {
-            let width = f64::from(area_click.width());
-            let height = f64::from(area_click.height());
-            let today = chrono::Local::now().date_naive();
-            let offset = *offset_click.borrow();
-            if let Some(clicked_date) =
-                loop_heatmap_hit_test(x, y, width, height, today, offset)
-            {
-                if clicked_date <= today {
-                    let is_scheduled = habit.is_scheduled_on(clicked_date.weekday());
-                    let cur_status = entries_click.borrow().get(&clicked_date).copied();
-
-                    let (new_status, new_val, delete_db) = if is_scheduled {
-                        // Workday: default is unrecorded / Missed
-                        match cur_status {
-                            None | Some(EntryStatus::Missed) => {
-                                (Some(EntryStatus::Completed), target_val, false)
-                            }
-                            Some(EntryStatus::Completed) => {
-                                (Some(EntryStatus::Skipped), 0.0, false)
-                            }
-                            Some(EntryStatus::Skipped) => {
-                                (None, 0.0, true)
-                            }
-                        }
-                    } else {
-                        // Inherent Rest Day: default is Skipped
-                        match cur_status {
-                            Some(EntryStatus::Skipped) | None => {
-                                // Transition to Completed (worked out on rest day)
-                                (Some(EntryStatus::Completed), target_val, false)
-                            }
-                            Some(EntryStatus::Completed) => {
-                                // Transition to Missed (explicitly missed)
-                                (Some(EntryStatus::Missed), 0.0, false)
-                            }
-                            Some(EntryStatus::Missed) => {
-                                // Reset back to natural rest day (delete explicit DB entry)
-                                (Some(EntryStatus::Skipped), 0.0, true)
-                            }
-                        }
-                    };
-
-                    {
-                        let inner = inner_click.borrow();
-                        let db = inner.db.borrow();
-                        if delete_db {
-                            let _ = db.delete_entry(habit_id, clicked_date);
-                        } else if let Some(status) = new_status {
-                            let _ = db.log_entry(habit_id, clicked_date, status, new_val);
-                        }
-
-                        if let Some(status) = new_status {
-                            entries_click.borrow_mut().insert(clicked_date, status);
-                        } else {
-                            entries_click.borrow_mut().remove(&clicked_date);
-                        }
-                    }
-
-                    area_click.queue_draw();
-                    refresh(&inner_click, &caches_click);
-                }
-            }
-        });
-    }
-    drawing_area.add_controller(gesture);
-
-    // When dialog closes, ensure main window is completely refreshed
-    {
-        let inner_close = Rc::clone(inner_rc);
-        let caches_close = caches.clone();
-        dialog.connect_closed(move |_| {
-            refresh(&inner_close, &caches_close);
-        });
-    }
-
-    dialog.present(Some(parent));
 }
 
 #[cfg(feature = "ui")]
@@ -1266,13 +1122,167 @@ fn connect_controllers(
 
     let inner_edit_btn = Rc::clone(inner_rc);
     let caches_edit_btn = caches.clone();
-    let win_edit = root_window.clone();
+    let details_edit_btn = details.clone();
     details.edit_mode_btn.connect_clicked(move |_| {
-        let selected_id = inner_edit_btn.borrow().selected_habit_id;
-        if let Some(habit_id) = selected_id {
-            show_history_editor_dialog(&win_edit, &inner_edit_btn, &caches_edit_btn, habit_id);
+        let (habit_opt, initial_entries) = {
+            let inner = inner_edit_btn.borrow();
+            let db = inner.db.borrow();
+            let habit_id = inner.selected_habit_id;
+            let h = habit_id.and_then(|id| db.get_habit(id).ok().flatten());
+            let today = chrono::Local::now().date_naive();
+            let start_date = today - chrono::Duration::weeks(104);
+            let e = habit_id
+                .and_then(|id| db.get_entries(id, start_date, today).ok())
+                .unwrap_or_default();
+            (h, e)
+        };
+        if let Some(habit) = habit_opt {
+            let habit_id = habit.id.unwrap_or(0);
+            *caches_edit_btn.editor_habit_id.borrow_mut() = Some(habit_id);
+            *caches_edit_btn.editor_week_offset.borrow_mut() = 0;
+            let habit_color = Rgba::from_hex(&habit.accent_color)
+                .unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
+            *caches_edit_btn.editor_color.borrow_mut() = habit_color;
+
+            let today = chrono::Local::now().date_naive();
+            let start_date = today - chrono::Duration::weeks(104);
+            let mut map = HashMap::with_capacity(initial_entries.len() + 104 * 7);
+            for e in initial_entries {
+                map.insert(e.date, e.status);
+            }
+            let mut cur = start_date;
+            while cur <= today {
+                if !map.contains_key(&cur) && !habit.is_scheduled_on(cur.weekday()) {
+                    map.insert(cur, EntryStatus::Skipped);
+                }
+                cur += chrono::Duration::days(1);
+            }
+            *caches_edit_btn.editor_entries.borrow_mut() = map;
+
+            details_edit_btn.editor_title.set_title(&habit.name);
+            details_edit_btn.editor_drawing_area.queue_draw();
+            details_edit_btn.editor_container.set_visible(true);
         }
     });
+
+    let inner_close_btn = Rc::clone(inner_rc);
+    let caches_close_btn = caches.clone();
+    let cont_close_btn = details.editor_container.clone();
+    details.editor_close_btn.connect_clicked(move |_| {
+        cont_close_btn.set_visible(false);
+        refresh(&inner_close_btn, &caches_close_btn);
+    });
+
+    let dimming_gesture = gtk4::GestureClick::new();
+    let inner_dim = Rc::clone(inner_rc);
+    let caches_dim = caches.clone();
+    let cont_dim = details.editor_container.clone();
+    dimming_gesture.connect_pressed(move |_, _, _, _| {
+        cont_dim.set_visible(false);
+        refresh(&inner_dim, &caches_dim);
+    });
+    details.editor_dimming.add_controller(dimming_gesture);
+
+    let scroll = gtk4::EventControllerScroll::new(
+        gtk4::EventControllerScrollFlags::VERTICAL | gtk4::EventControllerScrollFlags::HORIZONTAL,
+    );
+    let offset_scroll = Rc::clone(&caches.editor_week_offset);
+    let area_scroll = details.editor_drawing_area.clone();
+    scroll.connect_scroll(move |_, dx, dy| {
+        let delta = if dy.abs() > dx.abs() { dy } else { dx };
+        let mut off = offset_scroll.borrow_mut();
+        if delta > 0.0 {
+            *off = (*off + 2).min(104);
+        } else if delta < 0.0 {
+            *off = off.saturating_sub(2);
+        }
+        drop(off);
+        area_scroll.queue_draw();
+        gtk4::glib::Propagation::Stop
+    });
+    details.editor_drawing_area.add_controller(scroll);
+
+    let click_gesture = gtk4::GestureClick::new();
+    let offset_click = Rc::clone(&caches.editor_week_offset);
+    let entries_click = Rc::clone(&caches.editor_entries);
+    let habit_id_click = Rc::clone(&caches.editor_habit_id);
+    let area_click = details.editor_drawing_area.clone();
+    let inner_click = Rc::clone(inner_rc);
+    let caches_click = caches.clone();
+    click_gesture.connect_pressed(move |_, _, x, y| {
+        let Some(habit_id) = *habit_id_click.borrow() else { return };
+        let habit = {
+            let inner = inner_click.borrow();
+            let db = inner.db.borrow();
+            db.get_habit(habit_id).ok().flatten()
+        };
+        let Some(habit) = habit else { return };
+
+        let width = f64::from(area_click.width());
+        let height = f64::from(area_click.height());
+        let today = chrono::Local::now().date_naive();
+        let offset = *offset_click.borrow();
+        if let Some(clicked_date) = loop_heatmap_hit_test(x, y, width, height, today, offset) {
+            if clicked_date <= today {
+                let is_scheduled = habit.is_scheduled_on(clicked_date.weekday());
+                let cur_status = entries_click.borrow().get(&clicked_date).copied();
+                let target_val = habit.habit_type.target().unwrap_or(1.0);
+
+                let (new_status, new_val, delete_db) = if is_scheduled {
+                    match cur_status {
+                        None | Some(EntryStatus::Missed) => {
+                            (Some(EntryStatus::Completed), target_val, false)
+                        }
+                        Some(EntryStatus::Completed) => (Some(EntryStatus::Skipped), 0.0, false),
+                        Some(EntryStatus::Skipped) => (None, 0.0, true),
+                    }
+                } else {
+                    match cur_status {
+                        Some(EntryStatus::Skipped) | None => {
+                            (Some(EntryStatus::Completed), target_val, false)
+                        }
+                        Some(EntryStatus::Completed) => (Some(EntryStatus::Missed), 0.0, false),
+                        Some(EntryStatus::Missed) => (Some(EntryStatus::Skipped), 0.0, true),
+                    }
+                };
+
+                {
+                    let inner = inner_click.borrow();
+                    let db = inner.db.borrow();
+                    if delete_db {
+                        let _ = db.delete_entry(habit_id, clicked_date);
+                    } else if let Some(status) = new_status {
+                        let _ = db.log_entry(habit_id, clicked_date, status, new_val);
+                    }
+
+                    if let Some(status) = new_status {
+                        entries_click.borrow_mut().insert(clicked_date, status);
+                    } else {
+                        entries_click.borrow_mut().remove(&clicked_date);
+                    }
+                }
+
+                area_click.queue_draw();
+                refresh(&inner_click, &caches_click);
+            }
+        }
+    });
+    details.editor_drawing_area.add_controller(click_gesture);
+
+    let key_controller = gtk4::EventControllerKey::new();
+    let cont_key = details.editor_container.clone();
+    let inner_key = Rc::clone(inner_rc);
+    let caches_key = caches.clone();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk4::gdk::Key::Escape && cont_key.is_visible() {
+            cont_key.set_visible(false);
+            refresh(&inner_key, &caches_key);
+            gtk4::glib::Propagation::Stop
+        } else {
+            gtk4::glib::Propagation::Proceed
+        }
+    });
+    root_window.add_controller(key_controller);
 
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
@@ -1521,6 +1531,27 @@ fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
                 &color,
             );
         });
+
+    let editor_entries_draw = Rc::clone(&caches.editor_entries);
+    let editor_color_draw = Rc::clone(&caches.editor_color);
+    let editor_offset_draw = Rc::clone(&caches.editor_week_offset);
+    details
+        .editor_drawing_area
+        .set_draw_func(move |_area, cr, width, height| {
+            let entries = editor_entries_draw.borrow();
+            let color = editor_color_draw.borrow();
+            let week_offset = *editor_offset_draw.borrow();
+            let today = chrono::Local::now().date_naive();
+            draw_loop_heatmap(
+                cr,
+                f64::from(width),
+                f64::from(height),
+                today,
+                week_offset,
+                &entries,
+                &color,
+            );
+        });
 }
 
 /// Main application window providing Fast-Check List and push-navigation for details.
@@ -1555,6 +1586,7 @@ impl HabitWindow {
             .title("Habits")
             .default_width(520)
             .default_height(700)
+            .resizable(false)
             .build();
 
         let nav_view = libadwaita::NavigationView::new();
@@ -1581,6 +1613,10 @@ impl HabitWindow {
             heatmap_today: Rc::new(RefCell::new(today)),
             overview_score: Rc::new(RefCell::new(0.0)),
             overview_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            editor_entries: Rc::new(RefCell::new(HashMap::new())),
+            editor_week_offset: Rc::new(RefCell::new(0)),
+            editor_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            editor_habit_id: Rc::new(RefCell::new(None)),
         };
 
         connect_drawing_areas(&details, &caches);
