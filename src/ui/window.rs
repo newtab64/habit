@@ -5,6 +5,8 @@ use std::cell::RefCell;
 #[cfg(feature = "ui")]
 use std::collections::HashMap;
 #[cfg(feature = "ui")]
+use std::fmt::Write as _;
+#[cfg(feature = "ui")]
 use std::rc::Rc;
 
 #[cfg(feature = "ui")]
@@ -355,8 +357,9 @@ struct WindowInner {
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
     score_card_value: gtk4::Label,
-    current_streak_card_value: gtk4::Label,
-    best_streak_card_value: gtk4::Label,
+    month_diff_card_value: gtk4::Label,
+    year_diff_card_value: gtk4::Label,
+    total_count_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
     today_week_btn: gtk4::Button,
     next_week_btn: gtk4::Button,
@@ -383,8 +386,9 @@ struct DetailsWidgets {
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
     score_card_value: gtk4::Label,
-    current_streak_card_value: gtk4::Label,
-    best_streak_card_value: gtk4::Label,
+    month_diff_card_value: gtk4::Label,
+    year_diff_card_value: gtk4::Label,
+    total_count_card_value: gtk4::Label,
     curve_drawing_area: gtk4::DrawingArea,
     prev_week_btn: gtk4::Button,
     today_week_btn: gtk4::Button,
@@ -394,26 +398,22 @@ struct DetailsWidgets {
 }
 
 #[cfg(feature = "ui")]
-fn create_metric_card(title: &str, value_label: &gtk4::Label) -> gtk4::Box {
-    let card = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-    card.add_css_class("card");
-    card.set_hexpand(true);
-    card.set_margin_start(4);
-    card.set_margin_end(4);
-    card.set_margin_top(4);
-    card.set_margin_bottom(4);
+fn create_stat_column(value_label: &gtk4::Label, title: &str) -> gtk4::Box {
+    let col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    col.set_hexpand(true);
+    col.set_halign(gtk4::Align::Center);
+
+    value_label.add_css_class("title-1");
+    value_label.set_halign(gtk4::Align::Center);
+    col.append(value_label);
 
     let title_lbl = gtk4::Label::new(Some(title));
     title_lbl.add_css_class("dim-label");
     title_lbl.add_css_class("caption");
     title_lbl.set_halign(gtk4::Align::Center);
-    card.append(&title_lbl);
+    col.append(&title_lbl);
 
-    value_label.add_css_class("title-1");
-    value_label.set_halign(gtk4::Align::Center);
-    card.append(value_label);
-
-    card
+    col
 }
 
 #[cfg(feature = "ui")]
@@ -498,6 +498,19 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             full_css.push_str(&crate::ui::habit_row::generate_row_css(hid, &h.accent_color));
         }
     }
+    if let Some(hid) = inner.selected_habit_id {
+        if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(hid)) {
+            let color = if selected_habit.accent_color.starts_with('#') {
+                selected_habit.accent_color.clone()
+            } else {
+                format!("#{}", selected_habit.accent_color)
+            };
+            let _ = write!(
+                full_css,
+                ".overview-accent {{\n  color: {color};\n  font-weight: 700;\n}}\n"
+            );
+        }
+    }
     inner.habit_css_provider.load_from_data(&full_css);
 
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
@@ -576,12 +589,25 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
             inner.score_card_value.set_text(&metrics.score_percent);
-            inner
-                .current_streak_card_value
-                .set_text(&metrics.current_streak_text);
-            inner
-                .best_streak_card_value
-                .set_text(&metrics.best_streak_text);
+            inner.month_diff_card_value.set_text(&metrics.month_diff_text);
+            inner.year_diff_card_value.set_text(&metrics.year_diff_text);
+            inner.total_count_card_value.set_text(&metrics.total_count_text);
+
+            if metrics.month_diff >= 0.0 {
+                inner.month_diff_card_value.add_css_class("overview-accent");
+                inner.month_diff_card_value.remove_css_class("dim-label");
+            } else {
+                inner.month_diff_card_value.remove_css_class("overview-accent");
+                inner.month_diff_card_value.add_css_class("dim-label");
+            }
+
+            if metrics.year_diff >= 0.0 {
+                inner.year_diff_card_value.add_css_class("overview-accent");
+                inner.year_diff_card_value.remove_css_class("dim-label");
+            } else {
+                inner.year_diff_card_value.remove_css_class("overview-accent");
+                inner.year_diff_card_value.add_css_class("dim-label");
+            }
 
             let curve_pts = calculate_strength_history(selected_habit, &all_entries, 30, today);
             let rgba = Rgba::from_hex(&selected_habit.accent_color)
@@ -734,27 +760,59 @@ fn build_sidebar() -> SidebarWidgets {
 }
 
 #[cfg(feature = "ui")]
-fn build_metrics_section() -> (gtk4::Box, gtk4::Label, gtk4::Label, gtk4::Label) {
-    let metrics_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    metrics_box.set_homogeneous(true);
+fn build_overview_section() -> (
+    gtk4::Box,
+    gtk4::Label,
+    gtk4::Label,
+    gtk4::Label,
+    gtk4::Label,
+) {
+    let card = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
+    card.add_css_class("card");
+    card.set_margin_start(2);
+    card.set_margin_end(2);
+    card.set_margin_top(2);
+    card.set_margin_bottom(2);
+
+    let overview_title = gtk4::Label::new(Some("Overview"));
+    overview_title.add_css_class("heading");
+    overview_title.add_css_class("overview-accent");
+    overview_title.set_halign(gtk4::Align::Start);
+    overview_title.set_margin_start(10);
+    overview_title.set_margin_top(8);
+    card.append(&overview_title);
+
+    let stats_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    stats_box.set_homogeneous(true);
+    stats_box.set_margin_bottom(8);
 
     let score_card_value = gtk4::Label::new(Some("0%"));
-    let current_streak_card_value = gtk4::Label::new(Some("0d"));
-    let best_streak_card_value = gtk4::Label::new(Some("0d"));
+    score_card_value.add_css_class("overview-accent");
 
-    let card_score = create_metric_card("Score", &score_card_value);
-    let card_current = create_metric_card("Current Streak", &current_streak_card_value);
-    let card_best = create_metric_card("Best Streak", &best_streak_card_value);
+    let month_diff_card_value = gtk4::Label::new(Some("+0%"));
+    let year_diff_card_value = gtk4::Label::new(Some("+0%"));
 
-    metrics_box.append(&card_score);
-    metrics_box.append(&card_current);
-    metrics_box.append(&card_best);
+    let total_count_card_value = gtk4::Label::new(Some("0"));
+    total_count_card_value.add_css_class("overview-accent");
+
+    let col_score = create_stat_column(&score_card_value, "Score");
+    let col_month = create_stat_column(&month_diff_card_value, "Month");
+    let col_year = create_stat_column(&year_diff_card_value, "Year");
+    let col_total = create_stat_column(&total_count_card_value, "Total");
+
+    stats_box.append(&col_score);
+    stats_box.append(&col_month);
+    stats_box.append(&col_year);
+    stats_box.append(&col_total);
+
+    card.append(&stats_box);
 
     (
-        metrics_box,
+        card,
         score_card_value,
-        current_streak_card_value,
-        best_streak_card_value,
+        month_diff_card_value,
+        year_diff_card_value,
+        total_count_card_value,
     )
 }
 
@@ -861,9 +919,14 @@ fn build_details() -> DetailsWidgets {
     let sep2 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep2);
 
-    let (metrics_box, score_card_value, current_streak_card_value, best_streak_card_value) =
-        build_metrics_section();
-    details_vbox.append(&metrics_box);
+    let (
+        overview_card,
+        score_card_value,
+        month_diff_card_value,
+        year_diff_card_value,
+        total_count_card_value,
+    ) = build_overview_section();
+    details_vbox.append(&overview_card);
 
     let sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep3);
@@ -909,8 +972,9 @@ fn build_details() -> DetailsWidgets {
         edit_btn,
         delete_btn,
         score_card_value,
-        current_streak_card_value,
-        best_streak_card_value,
+        month_diff_card_value,
+        year_diff_card_value,
+        total_count_card_value,
         curve_drawing_area,
         prev_week_btn,
         today_week_btn,
@@ -1517,8 +1581,9 @@ impl HabitWindow {
             edit_btn: details.edit_btn.clone(),
             delete_btn: details.delete_btn.clone(),
             score_card_value: details.score_card_value,
-            current_streak_card_value: details.current_streak_card_value,
-            best_streak_card_value: details.best_streak_card_value,
+            month_diff_card_value: details.month_diff_card_value,
+            year_diff_card_value: details.year_diff_card_value,
+            total_count_card_value: details.total_count_card_value,
             curve_drawing_area: details.curve_drawing_area,
             today_week_btn: details.today_week_btn,
             next_week_btn: details.next_week_btn,
