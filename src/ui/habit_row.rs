@@ -212,8 +212,8 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
              border: none;\n  \
              background: none;\n  \
              box-shadow: none;\n  \
-             min-width: 36px;\n  \
-             min-height: 36px;\n  \
+             min-width: 44px;\n  \
+             min-height: 44px;\n  \
              padding: 0;\n\
          }}\n"
     )
@@ -358,8 +358,8 @@ impl HabitRowWidget {
         let habit_id = habit.id.unwrap_or(0);
         let on_toggle = std::rc::Rc::new(on_toggle);
 
-        // Main horizontal container with clean gap between habit info and tickboxes
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
+        // Main horizontal container with clean compact gap between habit info and tickboxes
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         container.add_css_class("habit-row");
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);
@@ -384,7 +384,7 @@ impl HabitRowWidget {
             let day_btn = gtk4::Button::new();
             day_btn.add_css_class("flat");
             day_btn.add_css_class("day-symbol-button");
-            day_btn.set_size_request(36, 36);
+            day_btn.set_size_request(44, 44);
 
             let day_label = gtk4::Label::new(Some(&display.text));
             day_label.add_css_class("day-symbol");
