@@ -29,7 +29,9 @@ use crate::engine::db::Database;
 #[cfg(feature = "ui")]
 use crate::engine::scoring::calculate_strength_history;
 #[cfg(feature = "ui")]
-use crate::ui::charts::{draw_loop_heatmap, draw_strength_curve, loop_heatmap_hit_test, Rgba};
+use crate::ui::charts::{
+    draw_loop_heatmap, draw_progress_ring, draw_strength_curve, loop_heatmap_hit_test, Rgba,
+};
 #[cfg(feature = "ui")]
 use crate::ui::habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
@@ -338,6 +340,8 @@ struct DrawCaches {
     heatmap_color: Rc<RefCell<Rgba>>,
     heatmap_week_offset: Rc<RefCell<usize>>,
     heatmap_today: Rc<RefCell<NaiveDate>>,
+    overview_score: Rc<RefCell<f64>>,
+    overview_color: Rc<RefCell<Rgba>>,
 }
 
 #[cfg(feature = "ui")]
@@ -356,6 +360,7 @@ struct WindowInner {
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
+    ring_drawing_area: gtk4::DrawingArea,
     score_card_value: gtk4::Label,
     month_diff_card_value: gtk4::Label,
     year_diff_card_value: gtk4::Label,
@@ -385,6 +390,7 @@ struct DetailsWidgets {
     color_badge: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
+    ring_drawing_area: gtk4::DrawingArea,
     score_card_value: gtk4::Label,
     month_diff_card_value: gtk4::Label,
     year_diff_card_value: gtk4::Label,
@@ -617,6 +623,10 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             *caches.curve_color.borrow_mut() = rgba;
             inner.curve_drawing_area.queue_draw();
 
+            *caches.overview_score.borrow_mut() = metrics.score;
+            *caches.overview_color.borrow_mut() = rgba;
+            inner.ring_drawing_area.queue_draw();
+
             // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
             inner
                 .next_week_btn
@@ -762,6 +772,7 @@ fn build_sidebar() -> SidebarWidgets {
 #[cfg(feature = "ui")]
 fn build_overview_section() -> (
     gtk4::Box,
+    gtk4::DrawingArea,
     gtk4::Label,
     gtk4::Label,
     gtk4::Label,
@@ -778,13 +789,26 @@ fn build_overview_section() -> (
     overview_title.add_css_class("heading");
     overview_title.add_css_class("overview-accent");
     overview_title.set_halign(gtk4::Align::Start);
-    overview_title.set_margin_start(10);
-    overview_title.set_margin_top(8);
+    overview_title.set_margin_start(14);
+    overview_title.set_margin_top(10);
     card.append(&overview_title);
 
-    let stats_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    stats_box.set_homogeneous(true);
-    stats_box.set_margin_bottom(8);
+    let stats_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    stats_box.set_margin_start(8);
+    stats_box.set_margin_end(8);
+    stats_box.set_margin_bottom(12);
+    stats_box.set_margin_top(2);
+
+    let ring_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    ring_box.set_valign(gtk4::Align::Center);
+    ring_box.set_halign(gtk4::Align::Center);
+    ring_box.set_hexpand(true);
+
+    let ring_drawing_area = gtk4::DrawingArea::new();
+    ring_drawing_area.set_content_width(38);
+    ring_drawing_area.set_content_height(38);
+    ring_box.append(&ring_drawing_area);
+    stats_box.append(&ring_box);
 
     let score_card_value = gtk4::Label::new(Some("0%"));
     score_card_value.add_css_class("overview-accent");
@@ -809,6 +833,7 @@ fn build_overview_section() -> (
 
     (
         card,
+        ring_drawing_area,
         score_card_value,
         month_diff_card_value,
         year_diff_card_value,
@@ -921,6 +946,7 @@ fn build_details() -> DetailsWidgets {
 
     let (
         overview_card,
+        ring_drawing_area,
         score_card_value,
         month_diff_card_value,
         year_diff_card_value,
@@ -971,6 +997,7 @@ fn build_details() -> DetailsWidgets {
         color_badge,
         edit_btn,
         delete_btn,
+        ring_drawing_area,
         score_card_value,
         month_diff_card_value,
         year_diff_card_value,
@@ -1003,15 +1030,6 @@ fn show_history_editor_dialog(
     };
     let Some(habit) = habit else { return };
 
-    let title = habit.name.clone();
-    let dialog = libadwaita::Window::builder()
-        .transient_for(parent)
-        .modal(true)
-        .title(&title)
-        .default_width(500)
-        .default_height(340)
-        .build();
-
     let toolbar_view = libadwaita::ToolbarView::new();
 
     let header = libadwaita::HeaderBar::new();
@@ -1033,7 +1051,14 @@ fn show_history_editor_dialog(
     content_box.append(&drawing_area);
 
     toolbar_view.set_content(Some(&content_box));
-    dialog.set_content(Some(&toolbar_view));
+
+    let dialog = libadwaita::Dialog::builder()
+        .title(&habit.name)
+        .content_width(500)
+        .content_height(340)
+        .presentation_mode(libadwaita::DialogPresentationMode::BottomSheet)
+        .child(&toolbar_view)
+        .build();
 
     let week_offset = Rc::new(RefCell::new(0usize));
     let entries_map = Rc::new(RefCell::new({
@@ -1180,13 +1205,12 @@ fn show_history_editor_dialog(
     {
         let inner_close = Rc::clone(inner_rc);
         let caches_close = caches.clone();
-        dialog.connect_close_request(move |_| {
+        dialog.connect_closed(move |_| {
             refresh(&inner_close, &caches_close);
-            gtk4::glib::Propagation::Proceed
         });
     }
 
-    dialog.present();
+    dialog.present(Some(parent));
 }
 
 #[cfg(feature = "ui")]
@@ -1237,23 +1261,6 @@ fn connect_controllers(
             show_history_editor_dialog(&win_edit, &inner_edit_btn, &caches_edit_btn, habit_id);
         }
     });
-
-    let heatmap_gesture = gtk4::GestureClick::new();
-    let inner_gesture = Rc::clone(inner_rc);
-    let caches_gesture = caches.clone();
-    let win_gesture = root_window.clone();
-    heatmap_gesture.connect_pressed(move |_, _, _, _| {
-        let selected_id = inner_gesture.borrow().selected_habit_id;
-        if let Some(habit_id) = selected_id {
-            show_history_editor_dialog(
-                &win_gesture,
-                &inner_gesture,
-                &caches_gesture,
-                habit_id,
-            );
-        }
-    });
-    details.heatmap_drawing_area.add_controller(heatmap_gesture);
 
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
@@ -1461,6 +1468,16 @@ fn setup_primary_menu(
 
 #[cfg(feature = "ui")]
 fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
+    let overview_score_draw = Rc::clone(&caches.overview_score);
+    let overview_color_draw = Rc::clone(&caches.overview_color);
+    details
+        .ring_drawing_area
+        .set_draw_func(move |_area, cr, width, height| {
+            let score = *overview_score_draw.borrow();
+            let color = overview_color_draw.borrow();
+            draw_progress_ring(cr, f64::from(width), f64::from(height), score, &color);
+        });
+
     let curve_data_draw = Rc::clone(&caches.curve_data);
     let curve_color_draw = Rc::clone(&caches.curve_color);
     details
@@ -1551,6 +1568,8 @@ impl HabitWindow {
             heatmap_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
             heatmap_week_offset: Rc::new(RefCell::new(0)),
             heatmap_today: Rc::new(RefCell::new(today)),
+            overview_score: Rc::new(RefCell::new(0.0)),
+            overview_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
         };
 
         connect_drawing_areas(&details, &caches);
@@ -1580,6 +1599,7 @@ impl HabitWindow {
             color_badge: details.color_badge,
             edit_btn: details.edit_btn.clone(),
             delete_btn: details.delete_btn.clone(),
+            ring_drawing_area: details.ring_drawing_area,
             score_card_value: details.score_card_value,
             month_diff_card_value: details.month_diff_card_value,
             year_diff_card_value: details.year_diff_card_value,

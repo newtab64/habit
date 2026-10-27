@@ -434,7 +434,7 @@ pub fn draw_progress_ring(
     let clamped = percentage.clamp(0.0, 1.0);
     if clamped > 0.001 {
         let start_angle = -std::f64::consts::FRAC_PI_2;
-        let end_angle = start_angle + clamped * 2.0 * std::f64::consts::PI;
+        let end_angle = (clamped * 2.0).mul_add(std::f64::consts::PI, start_angle);
         cr.set_source_rgba(color.r, color.g, color.b, 1.0);
         cr.arc(center_x, center_y, radius, start_angle, end_angle);
         let _ = cr.stroke();
