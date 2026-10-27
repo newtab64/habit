@@ -10,7 +10,7 @@ pub const HEATMAP_ROWS: usize = 6;
 /// Outer padding around the heatmap canvas (in pixels).
 pub const HEATMAP_PADDING: f64 = 8.0;
 /// Gap spacing between heatmap cells (in pixels).
-pub const HEATMAP_SPACING: f64 = 5.0;
+pub const HEATMAP_SPACING: f64 = 6.0;
 /// Top header height reserved for weekday label letters (M, T, W, T, F, S, S).
 pub const HEATMAP_HEADER_HEIGHT: f64 = 20.0;
 
@@ -310,7 +310,7 @@ pub fn calculate_loop_heatmap_layout(
     week_offset: usize,
 ) -> LoopHeatmapLayout {
     let padding = 8.0;
-    let square_spacing = 4.0;
+    let square_spacing = 6.0;
     let weekday_col_width = 18.0;
 
     let avail_h = (height - 2.0 * padding).max(24.0);

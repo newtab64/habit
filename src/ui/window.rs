@@ -1636,6 +1636,7 @@ impl HabitWindow {
             .build();
 
         let nav_view = libadwaita::NavigationView::new();
+        nav_view.set_animate_transitions(false);
 
         let sidebar = build_sidebar();
         nav_view.add(&sidebar.page);
