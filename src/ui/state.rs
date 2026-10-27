@@ -1,5 +1,5 @@
 use crate::engine::db::Database;
-use crate::engine::models::EntryStatus;
+use crate::engine::models::{EntryStatus, Habit, HabitEntry};
 use crate::engine::scoring::{calculate_habit_score, calculate_strength_history};
 use crate::ui::charts::Rgba;
 use crate::ui::habit_row::HabitRowWidget;
@@ -53,6 +53,7 @@ impl DrawCaches {
 }
 
 /// Internal mutable state and widget references for the habit window.
+#[derive(Clone)]
 pub struct WindowInner {
     pub nav_view: libadwaita::NavigationView,
     pub details_page: libadwaita::NavigationPage,
@@ -142,31 +143,16 @@ pub fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, h
 }
 
 /// Refreshes the UI state, habits list, metrics, charts, and heatmaps.
-#[allow(clippy::too_many_lines, clippy::cast_possible_wrap)]
-pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
-    let today = chrono::Local::now().date_naive();
-    let mut inner = inner_rc.borrow_mut();
-
-    let habits = inner.db.get_habits().unwrap_or_default();
-
-    // Reconcile selected habit
-    if inner.selected_habit_id.is_none() && !habits.is_empty() {
-        inner.selected_habit_id = habits.first().and_then(|h| h.id);
-    } else if let Some(sel_id) = inner.selected_habit_id {
-        if !habits.iter().any(|h| h.id == Some(sel_id)) {
-            inner.selected_habit_id = habits.first().and_then(|h| h.id);
-        }
-    }
-
-    // 0. Update header date labels (5 days: today on the left)
+fn update_header_dates(labels: &[gtk4::Label], today: NaiveDate) {
     let dates = crate::ui::habit_row::calculate_5_day_dates(today);
     for (i, d) in dates.iter().enumerate() {
-        if let Some(lbl) = inner.header_day_labels.get(i) {
+        if let Some(lbl) = labels.get(i) {
             lbl.set_text(&d.format("%m/%d").to_string());
         }
     }
+}
 
-    // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles, and seamless bottom-sheet dimming)
+fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id: Option<i64>) {
     let mut full_css = String::from(
         ".habit-title {\n  font-weight: 700;\n}\n\
          .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n}\n\
@@ -178,7 +164,7 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          button.destructive-action.flat,\n\
          button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
     );
-    for h in &habits {
+    for h in habits {
         if let Some(hid) = h.id {
             full_css.push_str(&crate::ui::habit_row::generate_row_css(
                 hid,
@@ -186,7 +172,7 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             ));
         }
     }
-    if let Some(hid) = inner.selected_habit_id {
+    if let Some(hid) = selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(hid)) {
             let color = if selected_habit.accent_color.starts_with('#') {
                 selected_habit.accent_color.clone()
@@ -199,8 +185,16 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             );
         }
     }
-    inner.habit_css_provider.load_from_data(&full_css);
+    provider.load_from_data(&full_css);
+}
 
+fn rebuild_habit_list(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    inner: &WindowInner,
+    habits: &[Habit],
+    caches: &DrawCaches,
+    today: NaiveDate,
+) {
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
     left_group.add_widget(&inner.habit_score_label);
 
@@ -214,12 +208,11 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         })
         .collect();
 
-    // 1. Rebuild habits list
     while let Some(child) = inner.habits_list_box.first_child() {
         inner.habits_list_box.remove(&child);
     }
 
-    for habit in &habits {
+    for habit in habits {
         let habit_id = habit.id.unwrap_or(0);
         let start_bound = NaiveDate::MIN;
         let entries = inner
@@ -252,8 +245,66 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         }
         inner.habits_list_box.append(row_widget.widget());
     }
+}
 
-    // 2. Update details
+fn update_charts(
+    inner: &WindowInner,
+    selected_habit: &Habit,
+    all_entries: &[HabitEntry],
+    metrics: &crate::ui::window::HabitMetrics,
+    caches: &DrawCaches,
+    today: NaiveDate,
+) {
+    let curve_pts = calculate_strength_history(selected_habit, all_entries, 30, today);
+    let rgba =
+        Rgba::from_hex(&selected_habit.accent_color).unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
+
+    *caches.curve_data.borrow_mut() = curve_pts;
+    *caches.curve_color.borrow_mut() = rgba;
+    inner.curve_drawing_area.queue_draw();
+
+    *caches.overview_score.borrow_mut() = metrics.score;
+    *caches.overview_color.borrow_mut() = rgba;
+    inner.ring_drawing_area.queue_draw();
+
+    // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
+    inner
+        .next_week_btn
+        .set_sensitive(inner.heatmap_week_offset > 0);
+    inner
+        .today_week_btn
+        .set_sensitive(inner.heatmap_week_offset > 0);
+
+    let offset_weeks = i64::try_from(inner.heatmap_week_offset).unwrap_or(0);
+    let weeks_back = offset_weeks + 104;
+    let heatmap_start = today - chrono::Duration::weeks(weeks_back);
+    let sel_id = selected_habit.id.unwrap_or(0);
+    let h_entries = inner
+        .db
+        .get_entries(sel_id, heatmap_start, today)
+        .unwrap_or_default();
+
+    let mut map = HashMap::with_capacity(h_entries.len() + 100);
+    for e in h_entries {
+        map.insert(e.date, e.status);
+    }
+
+    let mut cur = heatmap_start;
+    while cur <= today {
+        if !map.contains_key(&cur) && !selected_habit.is_scheduled_on(cur.weekday()) {
+            map.insert(cur, EntryStatus::Skipped);
+        }
+        cur += chrono::Duration::days(1);
+    }
+
+    *caches.heatmap_entries.borrow_mut() = map;
+    *caches.heatmap_color.borrow_mut() = rgba;
+    *caches.heatmap_week_offset.borrow_mut() = inner.heatmap_week_offset;
+    *caches.heatmap_today.borrow_mut() = today;
+    inner.heatmap_drawing_area.queue_draw();
+}
+
+fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, today: NaiveDate) {
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
             inner.edit_btn.set_visible(true);
@@ -305,55 +356,37 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
                 inner.year_diff_card_value.add_css_class("dim-label");
             }
 
-            let curve_pts = calculate_strength_history(selected_habit, &all_entries, 30, today);
-            let rgba = Rgba::from_hex(&selected_habit.accent_color)
-                .unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
-
-            *caches.curve_data.borrow_mut() = curve_pts;
-            *caches.curve_color.borrow_mut() = rgba;
-            inner.curve_drawing_area.queue_draw();
-
-            *caches.overview_score.borrow_mut() = metrics.score;
-            *caches.overview_color.borrow_mut() = rgba;
-            inner.ring_drawing_area.queue_draw();
-
-            // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
-            inner
-                .next_week_btn
-                .set_sensitive(inner.heatmap_week_offset > 0);
-            inner
-                .today_week_btn
-                .set_sensitive(inner.heatmap_week_offset > 0);
-
-            let weeks_back = (inner.heatmap_week_offset + 104) as i64;
-            let heatmap_start = today - chrono::Duration::weeks(weeks_back);
-            let h_entries = inner
-                .db
-                .get_entries(sel_id, heatmap_start, today)
-                .unwrap_or_default();
-
-            let mut map = HashMap::with_capacity(h_entries.len() + 100);
-            for e in h_entries {
-                map.insert(e.date, e.status);
-            }
-
-            let mut cur = heatmap_start;
-            while cur <= today {
-                if !map.contains_key(&cur) && !selected_habit.is_scheduled_on(cur.weekday()) {
-                    map.insert(cur, EntryStatus::Skipped);
-                }
-                cur += chrono::Duration::days(1);
-            }
-
-            *caches.heatmap_entries.borrow_mut() = map;
-            *caches.heatmap_color.borrow_mut() = rgba;
-            *caches.heatmap_week_offset.borrow_mut() = inner.heatmap_week_offset;
-            *caches.heatmap_today.borrow_mut() = today;
-            inner.heatmap_drawing_area.queue_draw();
+            update_charts(inner, selected_habit, &all_entries, &metrics, caches, today);
             return;
         }
     }
 
     inner.edit_btn.set_visible(false);
     inner.delete_btn.set_visible(false);
+}
+
+/// Refreshes the UI state, habits list, metrics, charts, and heatmaps.
+///
+/// NOTE: No `RefCell` borrow (shared or mutable) on `inner_rc` is held while
+/// invoking GTK widget methods, preventing reentrant dynamic borrow panics
+/// if widget calls trigger signal emission or reentrant callbacks.
+pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
+    let today = chrono::Local::now().date_naive();
+    let (inner, habits) = {
+        let mut inner_guard = inner_rc.borrow_mut();
+        let habits = inner_guard.db.get_habits().unwrap_or_default();
+        if inner_guard.selected_habit_id.is_none() && !habits.is_empty() {
+            inner_guard.selected_habit_id = habits.first().and_then(|h| h.id);
+        } else if let Some(sel_id) = inner_guard.selected_habit_id {
+            if !habits.iter().any(|h| h.id == Some(sel_id)) {
+                inner_guard.selected_habit_id = habits.first().and_then(|h| h.id);
+            }
+        }
+        (inner_guard.clone(), habits)
+    };
+
+    update_header_dates(&inner.header_day_labels, today);
+    update_css(&inner.habit_css_provider, &habits, inner.selected_habit_id);
+    rebuild_habit_list(inner_rc, &inner, &habits, caches, today);
+    update_details(&inner, &habits, caches, today);
 }

@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use chrono::NaiveDate;
 use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_WORKDAYS,
@@ -366,10 +369,8 @@ fn test_generate_row_css_structure_and_styling() {
 #[test]
 fn test_css_parsing_cleanliness() {
     match gtk4::init() {
-        Ok(_) => {
+        Ok(()) => {
             println!("GTK initialized successfully!");
-            use std::cell::RefCell;
-            use std::rc::Rc;
             let provider = gtk4::CssProvider::new();
             let errors = Rc::new(RefCell::new(Vec::new()));
             let errors_clone = Rc::clone(&errors);

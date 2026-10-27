@@ -268,3 +268,31 @@ fn test_nan_and_infinite_percentage_diff() {
     assert_eq!(format_percentage_diff(f64::INFINITY), "+0%");
     assert_eq!(format_percentage_diff(f64::NEG_INFINITY), "+0%");
 }
+
+#[test]
+fn test_refcell_borrow_safety_during_refresh_pattern() {
+    // Verifies the architectural rule: cloning state out of RefCell before invoking
+    // callbacks / methods prevents reentrant "RefCell already mutably borrowed" panics.
+    let cell = std::rc::Rc::new(std::cell::RefCell::new(vec![1, 2, 3]));
+    let reentrant_called = std::rc::Rc::new(std::cell::RefCell::new(false));
+    let cell_clone = std::rc::Rc::clone(&cell);
+    let reentrant_clone = std::rc::Rc::clone(&reentrant_called);
+
+    // Briefly borrow and copy state:
+    let items = {
+        let guard = cell.borrow();
+        guard.clone()
+    }; // guard dropped here
+
+    // Simulate calling a GTK widget method that triggers a signal re-entering cell:
+    for item in items {
+        if item == 2 {
+            // Re-entrant access that borrows mutably or immutably:
+            cell_clone.borrow_mut().push(item * 10);
+            *reentrant_clone.borrow_mut() = true;
+        }
+    }
+
+    assert!(*reentrant_called.borrow());
+    assert_eq!(*cell.borrow(), vec![1, 2, 3, 20]);
+}

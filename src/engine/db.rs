@@ -441,10 +441,8 @@ impl Database {
 
         let _guard = TempFileGuard(temp_backup.clone());
 
-        let src_conn = Connection::open_with_flags(
-            &temp_backup,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
+        let src_conn =
+            Connection::open_with_flags(&temp_backup, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
         let integrity: String =
             src_conn.query_row("PRAGMA integrity_check;", [], |row| row.get(0))?;

@@ -455,11 +455,12 @@ pub fn connect_detail_actions(
                         eprintln!("Failed to delete habit: {e}");
                     }
                     gtk4::glib::idle_add_local_once(move || {
-                        {
+                        let nav_view = {
                             let mut inner = inner_cb.borrow_mut();
                             inner.selected_habit_id = None;
-                            inner.nav_view.pop();
-                        }
+                            inner.nav_view.clone()
+                        };
+                        nav_view.pop();
                         refresh(&inner_cb, &caches_cb);
                     });
                 }

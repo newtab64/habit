@@ -149,8 +149,7 @@ fn test_backup_export_overwrites_existing_file() {
 
 #[test]
 fn test_database_shared_restore_without_refcell() {
-    let temp_dir =
-        std::env::temp_dir().join(format!("portal_test_shared_{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(format!("portal_test_shared_{}", std::process::id()));
     std::fs::create_dir_all(&temp_dir).unwrap();
     let backup_path = temp_dir.join("backup.db");
 

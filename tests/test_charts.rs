@@ -337,7 +337,8 @@ fn test_loop_heatmap_layout_and_cell_geometry() {
 
     // Latest column Monday + 1 day should be Tuesday (today)
     let last_col = layout.n_cols - 1;
-    let last_monday = layout.top_left_monday + chrono::Duration::weeks(last_col as i64);
+    let last_col_i64 = i64::try_from(last_col).unwrap();
+    let last_monday = layout.top_left_monday + chrono::Duration::weeks(last_col_i64);
     assert_eq!(last_monday + chrono::Duration::days(1), today);
 
     // Cell rect must be square
