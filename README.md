@@ -28,7 +28,21 @@ Designed to feel right at home on GNOME, Habit helps you build good routines wit
 cargo run --features ui
 ```
 
-### Install as Flatpak
+### Build & Package as Flatpak Bundle (`habit.flatpak`)
+
+```bash
+# 1. Build the Flatpak into a local repo
+flatpak-builder --force-clean --repo=repo build-dir build-aux/io.github.habit.Habit.json
+
+# 2. Export into a standalone habit.flatpak bundle
+flatpak build-bundle repo habit.flatpak io.github.habit.Habit
+
+# 3. Install and run the bundle
+flatpak install --user -y --reinstall habit.flatpak
+flatpak run io.github.habit.Habit
+```
+
+### Install directly as Flatpak (Development)
 
 ```bash
 flatpak-builder --user --install --force-clean build-dir build-aux/io.github.habit.Habit.json
