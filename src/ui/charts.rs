@@ -410,7 +410,7 @@ pub fn draw_progress_ring(
     percentage: f64,
     color: &Rgba,
 ) {
-    if width <= 0.0 || height <= 0.0 {
+    if width <= 0.0 || height <= 0.0 || !width.is_finite() || !height.is_finite() {
         return;
     }
 
@@ -431,7 +431,11 @@ pub fn draw_progress_ring(
     let _ = cr.stroke();
 
     // 2. Foreground active progress arc
-    let clamped = percentage.clamp(0.0, 1.0);
+    let clamped = if percentage.is_finite() {
+        percentage.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     if clamped > 0.001 {
         let start_angle = -std::f64::consts::FRAC_PI_2;
         let end_angle = (clamped * 2.0).mul_add(std::f64::consts::PI, start_angle);

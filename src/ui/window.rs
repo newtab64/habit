@@ -183,6 +183,9 @@ pub fn format_streak_badge(streak: u32) -> String {
 /// Formats a score percentage difference (e.g. `"+5%"`, `"-2%"`, `"+0%"`).
 #[must_use]
 pub fn format_percentage_diff(diff: f64) -> String {
+    if !diff.is_finite() {
+        return "+0%".to_string();
+    }
     let pct = (diff.abs() * 100.0).round();
     if diff >= 0.0 {
         format!("+{pct:.0}%")
@@ -246,11 +249,17 @@ pub fn calculate_habit_metrics(
     let pct = format_score_percentage(score);
     let (current_streak, best_streak) = calculate_streaks(habit, entries, as_of);
 
-    let score_month = calculate_habit_score(habit, entries, as_of - chrono::Duration::days(30));
+    let date_month = as_of
+        .checked_sub_signed(chrono::Duration::days(30))
+        .unwrap_or(as_of);
+    let score_month = calculate_habit_score(habit, entries, date_month);
     let month_diff = score - score_month;
     let month_diff_text = format_percentage_diff(month_diff);
 
-    let score_year = calculate_habit_score(habit, entries, as_of - chrono::Duration::days(365));
+    let date_year = as_of
+        .checked_sub_signed(chrono::Duration::days(365))
+        .unwrap_or(as_of);
+    let score_year = calculate_habit_score(habit, entries, date_year);
     let year_diff = score - score_year;
     let year_diff_text = format_percentage_diff(year_diff);
 

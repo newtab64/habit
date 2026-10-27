@@ -192,3 +192,69 @@ fn test_toggle_entry_state_binary_and_measurable() {
     assert_eq!(status, EntryStatus::Completed);
     assert!((val - 30.0).abs() < 1e-6);
 }
+
+#[test]
+fn test_empty_habit_metrics() {
+    let habit = Habit::new_binary("Meditation").with_id(99);
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+    let empty_entries: Vec<HabitEntry> = Vec::new();
+
+    let metrics = calculate_habit_metrics(&habit, &empty_entries, today);
+    assert_eq!(metrics.score, 0.0);
+    assert_eq!(metrics.score_percent, "0%");
+    assert_eq!(metrics.current_streak, 0);
+    assert_eq!(metrics.current_streak_text, "0d");
+    assert_eq!(metrics.best_streak, 0);
+    assert_eq!(metrics.best_streak_text, "0d");
+    assert_eq!(metrics.total_count, 0);
+    assert_eq!(metrics.total_count_text, "0");
+    assert_eq!(metrics.month_diff, 0.0);
+    assert_eq!(metrics.month_diff_text, "+0%");
+    assert_eq!(metrics.year_diff, 0.0);
+    assert_eq!(metrics.year_diff_text, "+0%");
+}
+
+#[test]
+fn test_future_entry_filtering_in_metrics() {
+    let habit = Habit::new_binary("Guitar").with_id(100);
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+    let entries = vec![
+        HabitEntry::new(100, today, EntryStatus::Completed, 1.0),
+        HabitEntry::new(100, today + chrono::Duration::days(1), EntryStatus::Completed, 1.0),
+        HabitEntry::new(100, today + chrono::Duration::days(5), EntryStatus::Completed, 1.0),
+    ];
+
+    let metrics = calculate_habit_metrics(&habit, &entries, today);
+    // Future entries must not be counted in total_count
+    assert_eq!(metrics.total_count, 1);
+    assert_eq!(metrics.total_count_text, "1");
+}
+
+#[test]
+fn test_decaying_negative_score_diff() {
+    let habit = Habit::new_binary("Reading").with_id(101);
+    let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+    // Habit completed daily between 40 and 31 days ago, then stopped completely
+    let mut entries = Vec::new();
+    for d in (31..=40).rev() {
+        entries.push(HabitEntry::new(
+            101,
+            today - chrono::Duration::days(d),
+            EntryStatus::Completed,
+            1.0,
+        ));
+    }
+
+    let metrics = calculate_habit_metrics(&habit, &entries, today);
+    // Because score was higher 30 days ago than today (decayed), month_diff is negative
+    assert!(metrics.month_diff < 0.0);
+    assert!(metrics.month_diff_text.starts_with('-'));
+    assert_eq!(metrics.total_count, 10);
+}
+
+#[test]
+fn test_nan_and_infinite_percentage_diff() {
+    assert_eq!(format_percentage_diff(f64::NAN), "+0%");
+    assert_eq!(format_percentage_diff(f64::INFINITY), "+0%");
+    assert_eq!(format_percentage_diff(f64::NEG_INFINITY), "+0%");
+}
