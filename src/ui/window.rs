@@ -419,6 +419,7 @@ struct DetailsWidgets {
     editor_title: libadwaita::WindowTitle,
     editor_close_btn: gtk4::Button,
     editor_drawing_area: gtk4::DrawingArea,
+    sheet_revealer: gtk4::Revealer,
 }
 
 #[cfg(feature = "ui")]
@@ -519,10 +520,9 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n  transition: none;\n  animation: none;\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
-         .editor-bottom-sheet * {\n  transition: none;\n  animation: none;\n}\n\
-         .editor-sheet-header {\n  transition: none;\n  animation: none;\n}\n\
+         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0);\n  transition: background-color 250ms ease-out;\n}\n\
+         .editor-dimming-backdrop.active {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n}\n\
          button.destructive-action.flat,\n\
          button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
     );
@@ -1069,7 +1069,22 @@ fn build_details() -> DetailsWidgets {
     sheet_content.append(&editor_drawing_area);
     sheet_box.append(&sheet_content);
 
-    editor_container.append(&sheet_box);
+    let sheet_revealer = gtk4::Revealer::new();
+    sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
+    sheet_revealer.set_transition_duration(250);
+    sheet_revealer.set_child(Some(&sheet_box));
+    sheet_revealer.set_valign(gtk4::Align::End);
+    sheet_revealer.set_hexpand(true);
+    sheet_revealer.set_reveal_child(false);
+
+    let cont_on_hide = editor_container.clone();
+    sheet_revealer.connect_child_revealed_notify(move |rev| {
+        if !rev.is_child_revealed() {
+            cont_on_hide.set_visible(false);
+        }
+    });
+
+    editor_container.append(&sheet_revealer);
     overlay.add_overlay(&editor_container);
 
     let page = libadwaita::NavigationPage::new(&overlay, "Details");
@@ -1098,6 +1113,7 @@ fn build_details() -> DetailsWidgets {
         editor_title,
         editor_close_btn,
         editor_drawing_area,
+        sheet_revealer,
     }
 }
 
@@ -1183,24 +1199,41 @@ fn connect_controllers(
             details_edit_btn.editor_title.set_title(&habit.name);
             details_edit_btn.editor_drawing_area.queue_draw();
             details_edit_btn.editor_container.set_visible(true);
+            let rev_open = details_edit_btn.sheet_revealer.clone();
+            let cont_open = details_edit_btn.editor_container.clone();
+            gtk4::glib::idle_add_local_once(move || {
+                cont_open.add_css_class("active");
+                rev_open.set_reveal_child(true);
+            });
         }
     });
 
-    let inner_close_btn = Rc::clone(inner_rc);
-    let caches_close_btn = caches.clone();
-    let cont_close_btn = details.editor_container.clone();
+    let close_editor = {
+        let rev_close = details.sheet_revealer.clone();
+        let cont_close = details.editor_container.clone();
+        let inner_close = Rc::clone(inner_rc);
+        let caches_close = caches.clone();
+        move || {
+            if cont_close.is_visible() {
+                cont_close.remove_css_class("active");
+                rev_close.set_reveal_child(false);
+                if !rev_close.is_child_revealed() {
+                    cont_close.set_visible(false);
+                }
+                refresh(&inner_close, &caches_close);
+            }
+        }
+    };
+
+    let close_btn_action = close_editor.clone();
     details.editor_close_btn.connect_clicked(move |_| {
-        cont_close_btn.set_visible(false);
-        refresh(&inner_close_btn, &caches_close_btn);
+        close_btn_action();
     });
 
+    let close_dim_action = close_editor.clone();
     let dimming_gesture = gtk4::GestureClick::new();
-    let inner_dim = Rc::clone(inner_rc);
-    let caches_dim = caches.clone();
-    let cont_dim = details.editor_container.clone();
     dimming_gesture.connect_pressed(move |_, _, _, _| {
-        cont_dim.set_visible(false);
-        refresh(&inner_dim, &caches_dim);
+        close_dim_action();
     });
     details.editor_dimming.add_controller(dimming_gesture);
 
@@ -1292,12 +1325,10 @@ fn connect_controllers(
 
     let key_controller = gtk4::EventControllerKey::new();
     let cont_key = details.editor_container.clone();
-    let inner_key = Rc::clone(inner_rc);
-    let caches_key = caches.clone();
+    let close_key = close_editor;
     key_controller.connect_key_pressed(move |_, key, _, _| {
         if key == gtk4::gdk::Key::Escape && cont_key.is_visible() {
-            cont_key.set_visible(false);
-            refresh(&inner_key, &caches_key);
+            close_key();
             gtk4::glib::Propagation::Stop
         } else {
             gtk4::glib::Propagation::Proceed

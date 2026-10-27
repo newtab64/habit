@@ -384,16 +384,40 @@ pub fn show_habit_dialog(
     scrolled.set_child(Some(&toast_overlay));
     sheet_box.append(&scrolled);
 
-    dialog_container.append(&sheet_box);
+    let sheet_revealer = gtk4::Revealer::new();
+    sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
+    sheet_revealer.set_transition_duration(250);
+    sheet_revealer.set_child(Some(&sheet_box));
+    sheet_revealer.set_valign(gtk4::Align::End);
+    sheet_revealer.set_hexpand(true);
+    sheet_revealer.set_reveal_child(false);
+
+    dialog_container.append(&sheet_revealer);
 
     let closed = std::rc::Rc::new(std::cell::RefCell::new(false));
     let overlay_for_close = root_overlay.clone();
     let container_for_close = dialog_container.clone();
+    let revealer_for_close = sheet_revealer.clone();
     let close_dialog = move || {
         let mut is_closed = closed.borrow_mut();
         if !*is_closed {
             *is_closed = true;
-            overlay_for_close.remove_overlay(&container_for_close);
+            container_for_close.remove_css_class("active");
+            revealer_for_close.set_reveal_child(false);
+            let overlay_rm = overlay_for_close.clone();
+            let cont_rm = container_for_close.clone();
+            let removed = std::rc::Rc::new(std::cell::RefCell::new(false));
+            let removed_clone = removed.clone();
+            revealer_for_close.connect_child_revealed_notify(move |rev| {
+                if !rev.is_child_revealed() && !*removed_clone.borrow() {
+                    *removed_clone.borrow_mut() = true;
+                    overlay_rm.remove_overlay(&cont_rm);
+                }
+            });
+            if !revealer_for_close.is_child_revealed() && !*removed.borrow() {
+                *removed.borrow_mut() = true;
+                overlay_for_close.remove_overlay(&container_for_close);
+            }
         }
     };
 
@@ -457,4 +481,11 @@ pub fn show_habit_dialog(
     });
 
     root_overlay.add_overlay(&dialog_container);
+
+    let rev_open = sheet_revealer;
+    let cont_open = dialog_container;
+    gtk4::glib::idle_add_local_once(move || {
+        cont_open.add_css_class("active");
+        rev_open.set_reveal_child(true);
+    });
 }
