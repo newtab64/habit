@@ -4,7 +4,7 @@ use habit::engine::models::{
     SCHEDULE_SAT, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 use habit::ui::window::{
-    calculate_habit_metrics, format_schedule_summary, format_streak_badge,
+    calculate_habit_metrics, format_percentage_diff, format_schedule_summary, format_streak_badge,
     format_strength_percentage, format_target_summary, toggle_entry_state, MonthNavigation,
 };
 
@@ -131,6 +131,21 @@ fn test_calculate_habit_metrics_from_entries() {
     assert_eq!(metrics.best_streak_text, "4d");
     assert!(metrics.strength > 0.08);
     assert!(metrics.strength_percent.ends_with('%'));
+    assert_eq!(metrics.total_count, 4);
+    assert_eq!(metrics.total_count_text, "4");
+    assert!(metrics.month_diff > 0.0);
+    assert!(metrics.month_diff_text.starts_with('+'));
+    assert!(metrics.year_diff > 0.0);
+    assert!(metrics.year_diff_text.starts_with('+'));
+}
+
+#[test]
+fn test_percentage_diff_formatting() {
+    assert_eq!(format_percentage_diff(0.0), "+0%");
+    assert_eq!(format_percentage_diff(0.05), "+5%");
+    assert_eq!(format_percentage_diff(0.124), "+12%");
+    assert_eq!(format_percentage_diff(-0.03), "-3%");
+    assert_eq!(format_percentage_diff(-0.256), "-26%");
 }
 
 #[test]

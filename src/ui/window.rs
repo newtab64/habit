@@ -176,6 +176,17 @@ pub fn format_streak_badge(streak: u32) -> String {
     format!("{streak}d")
 }
 
+/// Formats a score percentage difference (e.g. `"+5%"`, `"-2%"`, `"+0%"`).
+#[must_use]
+pub fn format_percentage_diff(diff: f64) -> String {
+    let pct = (diff.abs() * 100.0).round();
+    if diff >= 0.0 {
+        format!("+{pct:.0}%")
+    } else {
+        format!("-{pct:.0}%")
+    }
+}
+
 /// Formats the target and unit description for a habit (e.g. `"1 session"` or `"30 pages"`).
 #[must_use]
 pub fn format_target_summary(habit: &Habit) -> String {
@@ -206,9 +217,21 @@ pub struct HabitMetrics {
     pub best_streak: u32,
     /// Formatted best streak badge (e.g. `"18d"`).
     pub best_streak_text: String,
+    /// Score difference compared to 30 days ago.
+    pub month_diff: f64,
+    /// Formatted 30-day difference (e.g. `"+5%"`).
+    pub month_diff_text: String,
+    /// Score difference compared to 365 days ago.
+    pub year_diff: f64,
+    /// Formatted 365-day difference (e.g. `"+12%"`).
+    pub year_diff_text: String,
+    /// All-time completed entries count up to evaluation date.
+    pub total_count: usize,
+    /// Formatted completed count string (e.g. `"42"`).
+    pub total_count_text: String,
 }
 
-/// Calculates score and streak analytics for a habit given its entries and evaluation date.
+/// Calculates score, overview differences, and streak analytics for a habit given its entries and evaluation date.
 #[must_use]
 pub fn calculate_habit_metrics(
     habit: &Habit,
@@ -218,6 +241,21 @@ pub fn calculate_habit_metrics(
     let score = calculate_habit_score(habit, entries, as_of);
     let pct = format_score_percentage(score);
     let (current_streak, best_streak) = calculate_streaks(habit, entries, as_of);
+
+    let score_month = calculate_habit_score(habit, entries, as_of - chrono::Duration::days(30));
+    let month_diff = score - score_month;
+    let month_diff_text = format_percentage_diff(month_diff);
+
+    let score_year = calculate_habit_score(habit, entries, as_of - chrono::Duration::days(365));
+    let year_diff = score - score_year;
+    let year_diff_text = format_percentage_diff(year_diff);
+
+    let total_count = entries
+        .iter()
+        .filter(|e| e.status == EntryStatus::Completed && e.date <= as_of)
+        .count();
+    let total_count_text = total_count.to_string();
+
     HabitMetrics {
         score,
         score_percent: pct.clone(),
@@ -227,6 +265,12 @@ pub fn calculate_habit_metrics(
         current_streak_text: format_streak_badge(current_streak),
         best_streak,
         best_streak_text: format_streak_badge(best_streak),
+        month_diff,
+        month_diff_text,
+        year_diff,
+        year_diff_text,
+        total_count,
+        total_count_text,
     }
 }
 
