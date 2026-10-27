@@ -32,7 +32,8 @@
       "sources": [
         {
           "type": "dir",
-          "path": ".."
+          "path": "..",
+          "skip": [".git", "target", ".flatpak-builder", "build-dir", "repo", "habit.flatpak"]
         }
       ]
     }
