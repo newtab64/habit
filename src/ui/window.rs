@@ -516,8 +516,10 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 0;\n  margin-right: 0;\n  margin-bottom: 0;\n}\n",
+         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n  transition: none;\n  animation: none;\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
+         .editor-bottom-sheet * {\n  transition: none;\n  animation: none;\n}\n\
+         .editor-sheet-header {\n  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n  transition: none;\n  animation: none;\n}\n",
     );
     for h in &habits {
         if let Some(hid) = h.id {
@@ -1013,11 +1015,11 @@ fn build_details() -> DetailsWidgets {
 
     let editor_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     editor_container.set_visible(false);
+    editor_container.add_css_class("editor-dimming-backdrop");
 
     let editor_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     editor_dimming.set_vexpand(true);
     editor_dimming.set_hexpand(true);
-    editor_dimming.add_css_class("editor-dimming-backdrop");
     editor_container.append(&editor_dimming);
 
     let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -1025,16 +1027,21 @@ fn build_details() -> DetailsWidgets {
     sheet_box.set_hexpand(true);
     sheet_box.add_css_class("editor-bottom-sheet");
 
-    let sheet_header = libadwaita::HeaderBar::new();
-    sheet_header.set_show_start_title_buttons(false);
-    sheet_header.set_show_end_title_buttons(false);
+    let sheet_header = gtk4::CenterBox::new();
+    sheet_header.add_css_class("editor-sheet-header");
+    sheet_header.set_margin_start(16);
+    sheet_header.set_margin_end(10);
+    sheet_header.set_margin_top(10);
+    sheet_header.set_margin_bottom(6);
+
     let editor_title = libadwaita::WindowTitle::new("Edit History", "");
-    sheet_header.set_title_widget(Some(&editor_title));
+    sheet_header.set_center_widget(Some(&editor_title));
 
     let editor_close_btn = gtk4::Button::from_icon_name("window-close-symbolic");
     editor_close_btn.add_css_class("flat");
+    editor_close_btn.add_css_class("circular");
     editor_close_btn.set_tooltip_text(Some("Close"));
-    sheet_header.pack_end(&editor_close_btn);
+    sheet_header.set_end_widget(Some(&editor_close_btn));
     sheet_box.append(&sheet_header);
 
     let sheet_content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);

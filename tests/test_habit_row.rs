@@ -388,6 +388,8 @@ fn test_css_parsing_cleanliness() {
             // Also verify the bottom-sheet dimming & seamless docking CSS
             let sheet_css = ".editor-dimming-backdrop {\n\
                   background-color: rgba(0, 0, 0, 0.45);\n\
+                  transition: none;\n\
+                  animation: none;\n\
                 }\n\
                 .editor-bottom-sheet {\n\
                   background-color: var(--window-bg-color);\n\
@@ -396,9 +398,20 @@ fn test_css_parsing_cleanliness() {
                   border-bottom-left-radius: 0;\n\
                   border-bottom-right-radius: 0;\n\
                   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n\
-                  margin-left: 0;\n\
-                  margin-right: 0;\n\
+                  margin-left: 10px;\n\
+                  margin-right: 10px;\n\
                   margin-bottom: 0;\n\
+                  transition: none;\n\
+                  animation: none;\n\
+                }\n\
+                .editor-bottom-sheet * {\n\
+                  transition: none;\n\
+                  animation: none;\n\
+                }\n\
+                .editor-sheet-header {\n\
+                  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n\
+                  transition: none;\n\
+                  animation: none;\n\
                 }\n";
             provider.load_from_data(sheet_css);
             println!("Errors captured for sheet CSS: {:?}", errors.borrow());
