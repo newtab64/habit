@@ -895,66 +895,31 @@ fn show_history_editor_dialog(
     };
     let Some(habit) = habit else { return };
 
-    let title = format!("History - {}", habit.name);
+    let title = habit.name.clone();
     let dialog = libadwaita::Window::builder()
         .transient_for(parent)
         .modal(true)
         .title(&title)
-        .default_width(520)
-        .default_height(460)
+        .default_width(500)
+        .default_height(340)
         .build();
 
     let toolbar_view = libadwaita::ToolbarView::new();
 
     let header = libadwaita::HeaderBar::new();
-    let window_title = libadwaita::WindowTitle::new(&habit.name, "Click day to toggle status");
+    let window_title = libadwaita::WindowTitle::new(&habit.name, "");
     header.set_title_widget(Some(&window_title));
-
-    let done_btn = gtk4::Button::with_label("Done");
-    done_btn.add_css_class("suggested-action");
-    let dlg_close = dialog.clone();
-    done_btn.connect_clicked(move |_| {
-        dlg_close.close();
-    });
-    header.pack_end(&done_btn);
     toolbar_view.add_top_bar(&header);
 
-    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
-    content_box.set_margin_start(16);
-    content_box.set_margin_end(16);
-    content_box.set_margin_top(12);
-    content_box.set_margin_bottom(16);
-
-    // Navigation and legend row
-    let nav_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    let nav_btns = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-
-    let prev_btn = gtk4::Button::from_icon_name("go-previous-symbolic");
-    prev_btn.set_tooltip_text(Some("Earlier Weeks"));
-    nav_btns.append(&prev_btn);
-
-    let today_btn = gtk4::Button::with_label("Today");
-    today_btn.set_tooltip_text(Some("Jump to Today"));
-    nav_btns.append(&today_btn);
-
-    let next_btn = gtk4::Button::from_icon_name("go-next-symbolic");
-    next_btn.set_tooltip_text(Some("Newer Weeks"));
-    nav_btns.append(&next_btn);
-
-    nav_row.append(&nav_btns);
-
-    let hint_lbl = gtk4::Label::new(Some("✓ Completed  |  ⏸ Rest Day  |  ○ Clear"));
-    hint_lbl.add_css_class("dim-label");
-    hint_lbl.add_css_class("caption");
-    hint_lbl.set_hexpand(true);
-    hint_lbl.set_halign(gtk4::Align::End);
-    nav_row.append(&hint_lbl);
-
-    content_box.append(&nav_row);
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    content_box.set_margin_start(12);
+    content_box.set_margin_end(12);
+    content_box.set_margin_top(8);
+    content_box.set_margin_bottom(12);
 
     // Large heatmap drawing area
     let drawing_area = gtk4::DrawingArea::new();
-    drawing_area.set_size_request(-1, 330);
+    drawing_area.set_size_request(-1, 280);
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
     content_box.append(&drawing_area);
@@ -1004,44 +969,27 @@ fn show_history_editor_dialog(
         });
     }
 
-    // Navigation clicks
+    // Scroll controller for mouse wheel / touchpad week scrolling
+    let scroll = gtk4::EventControllerScroll::new(
+        gtk4::EventControllerScrollFlags::VERTICAL | gtk4::EventControllerScrollFlags::HORIZONTAL,
+    );
     {
-        let offset_prev = Rc::clone(&week_offset);
-        let area_prev = drawing_area.clone();
-        let next_btn_prev = next_btn.clone();
-        prev_btn.connect_clicked(move |_| {
-            *offset_prev.borrow_mut() += 4;
-            next_btn_prev.set_sensitive(true);
-            area_prev.queue_draw();
-        });
-    }
-    {
-        let offset_today = Rc::clone(&week_offset);
-        let area_today = drawing_area.clone();
-        let next_btn_today = next_btn.clone();
-        today_btn.connect_clicked(move |_| {
-            *offset_today.borrow_mut() = 0;
-            next_btn_today.set_sensitive(false);
-            area_today.queue_draw();
-        });
-    }
-    {
-        let offset_next = Rc::clone(&week_offset);
-        let area_next = drawing_area.clone();
-        let next_btn_next = next_btn.clone();
-        next_btn.connect_clicked(move |_| {
-            let mut off = offset_next.borrow_mut();
-            if *off >= 4 {
-                *off -= 4;
-            } else {
-                *off = 0;
+        let offset_scroll = Rc::clone(&week_offset);
+        let area_scroll = drawing_area.clone();
+        scroll.connect_scroll(move |_, dx, dy| {
+            let delta = if dy.abs() > dx.abs() { dy } else { dx };
+            let mut off = offset_scroll.borrow_mut();
+            if delta > 0.0 {
+                *off = (*off + 2).min(104);
+            } else if delta < 0.0 {
+                *off = off.saturating_sub(2);
             }
-            next_btn_next.set_sensitive(*off > 0);
             drop(off);
-            area_next.queue_draw();
+            area_scroll.queue_draw();
+            gtk4::glib::Propagation::Stop
         });
     }
-    next_btn.set_sensitive(false);
+    drawing_area.add_controller(scroll);
 
     // Click gesture to directly toggle entry status
     let gesture = gtk4::GestureClick::new();
