@@ -1063,9 +1063,10 @@ fn show_history_editor_dialog(
 
     let dialog = libadwaita::Dialog::builder()
         .title(&habit.name)
-        .content_width(500)
-        .content_height(340)
+        .content_width(480)
+        .content_height(360)
         .presentation_mode(libadwaita::DialogPresentationMode::BottomSheet)
+        .valign(gtk4::Align::End)
         .child(&toolbar_view)
         .build();
 
@@ -1552,7 +1553,6 @@ impl HabitWindow {
             .title("Habits")
             .default_width(520)
             .default_height(700)
-            .resizable(false)
             .build();
 
         let nav_view = libadwaita::NavigationView::new();
