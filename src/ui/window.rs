@@ -446,7 +446,9 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     }
 
     // Build and apply global dynamic CSS for habit row styling (accent color on symbols, progress bars, bold titles)
-    let mut full_css = String::from(".habit-title { font-weight: 700 !important; }\n");
+    let mut full_css = String::from(
+        ".habit-title {\n  font-weight: 700;\n}\n.day-symbol {\n  font-size: 15px;\n  font-weight: bold;\n}\n",
+    );
     for h in &habits {
         if let Some(hid) = h.id {
             full_css.push_str(&crate::ui::habit_row::generate_row_css(hid, &h.accent_color));

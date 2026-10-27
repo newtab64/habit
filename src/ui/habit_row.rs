@@ -178,39 +178,42 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
     format!(
         ".habit-row-{habit_id} .symbol-completed,\n\
          .habit-row-{habit_id} .symbol-rest,\n\
+         .habit-row-{habit_id} button.day-symbol-button label.symbol-completed,\n\
+         .habit-row-{habit_id} button.day-symbol-button label.symbol-rest,\n\
          .habit-row-{habit_id} .day-symbol-button .symbol-completed,\n\
          .habit-row-{habit_id} .day-symbol-button .symbol-rest {{\n  \
-             color: {color} !important;\n\
+             color: {color};\n\
          }}\n\
          .habit-row-{habit_id} .symbol-missed,\n\
          .habit-row-{habit_id} .symbol-partial,\n\
+         .habit-row-{habit_id} button.day-symbol-button label.symbol-missed,\n\
+         .habit-row-{habit_id} button.day-symbol-button label.symbol-partial,\n\
          .habit-row-{habit_id} .day-symbol-button .symbol-missed,\n\
          .habit-row-{habit_id} .day-symbol-button .symbol-partial {{\n  \
-             color: #77767b !important;\n  \
+             color: #77767b;\n  \
              opacity: 0.55;\n\
          }}\n\
          .habit-row-{habit_id} progressbar > trough > progress,\n\
          .habit-row-{habit_id} .habit-progress > trough > progress,\n\
          .habit-row-{habit_id} .habit-progress progress {{\n  \
-             background-color: {color} !important;\n  \
-             background: {color} !important;\n  \
+             background-color: {color};\n  \
+             background-image: none;\n  \
              min-height: 5px;\n  \
-             height: 5px;\n  \
              border-radius: 3px;\n\
          }}\n\
          .habit-row-{habit_id} progressbar > trough,\n\
+         .habit-row-{habit_id} .habit-progress > trough,\n\
          .habit-row-{habit_id} .habit-progress trough {{\n  \
              min-height: 5px;\n  \
-             height: 5px;\n  \
              border-radius: 3px;\n\
          }}\n\
+         .habit-row-{habit_id} button.day-symbol-button,\n\
          .habit-row-{habit_id} .day-symbol-button {{\n  \
              border: none;\n  \
              background: none;\n  \
              box-shadow: none;\n  \
              min-width: 36px;\n  \
-             width: 36px;\n  \
-             height: 36px;\n  \
+             min-height: 36px;\n  \
              padding: 0;\n\
          }}\n"
     )
@@ -245,7 +248,11 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     left_box.set_hexpand(true);
     left_box.set_valign(gtk4::Align::Center);
 
-    let title_label = gtk4::Label::new(Some(name));
+    let title_label = gtk4::Label::new(None);
+    title_label.set_markup(&format!(
+        "<b>{}</b>",
+        gtk4::glib::markup_escape_text(name)
+    ));
     title_label.set_halign(gtk4::Align::Start);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");

@@ -342,8 +342,51 @@ fn test_generate_row_css_structure_and_styling() {
     assert!(css.contains(".habit-progress progress"));
     assert!(css.contains("5px"), "Progress bar height must be 5px");
 
+    // CSS syntax purity for GTK4 (no !important, no width/height properties)
+    assert!(
+        !css.contains("!important"),
+        "GTK4 CSS parser rejects !important as junk at end of value"
+    );
+    assert!(
+        !css.contains(" height:"),
+        "GTK4 CSS has no 'height' property; must use min-height"
+    );
+    assert!(
+        !css.contains(" width:"),
+        "GTK4 CSS has no 'width' property; must use min-width"
+    );
+
     // Test normalization when passed without leading '#'
     let css_no_hash = generate_row_css(10, "FF7800");
     assert!(css_no_hash.contains(".habit-row-10"));
     assert!(css_no_hash.contains("#FF7800"));
+}
+
+#[cfg(feature = "ui")]
+#[test]
+fn test_css_parsing_cleanliness() {
+    match gtk4::init() {
+        Ok(_) => {
+            println!("GTK initialized successfully!");
+            use std::cell::RefCell;
+            use std::rc::Rc;
+            let provider = gtk4::CssProvider::new();
+            let errors = Rc::new(RefCell::new(Vec::new()));
+            let errors_clone = Rc::clone(&errors);
+            provider.connect_parsing_error(move |_, _section, error| {
+                errors_clone.borrow_mut().push(format!("{error}"));
+            });
+            let css = generate_row_css(1, "#3584E4");
+            provider.load_from_data(&css);
+            println!("Errors captured: {:?}", errors.borrow());
+            assert!(
+                errors.borrow().is_empty(),
+                "CSS had parser errors: {:?}",
+                errors.borrow()
+            );
+        }
+        Err(e) => {
+            println!("GTK init failed: {e}");
+        }
+    }
 }
