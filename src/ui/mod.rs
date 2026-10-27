@@ -1,6 +1,10 @@
 pub mod charts;
+#[cfg(feature = "ui")]
+pub mod details;
 pub mod habit_dialog;
 pub mod habit_row;
+#[cfg(feature = "ui")]
+pub mod history_editor;
 pub mod metrics;
 pub mod portal;
 #[cfg(feature = "ui")]
@@ -22,9 +26,13 @@ pub use metrics::{
 pub use portal::default_backup_filename;
 
 #[cfg(feature = "ui")]
+pub use details::{build_details, DetailsWidgets};
+#[cfg(feature = "ui")]
 pub use habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
 pub use habit_row::HabitRowWidget;
+#[cfg(feature = "ui")]
+pub use history_editor::{build_history_editor, HistoryEditorWidgets};
 #[cfg(feature = "ui")]
 pub use portal::{trigger_export_dialog, trigger_import_dialog};
 #[cfg(feature = "ui")]
