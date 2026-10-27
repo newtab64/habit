@@ -1,13 +1,13 @@
 use chrono::Datelike;
 
 #[cfg(feature = "ui")]
-use crate::engine::models::EntryStatus;
+use super::geometry::draw_rounded_rect;
 use super::geometry::Rect;
 #[cfg(feature = "ui")]
 use super::geometry::Rgba;
-#[cfg(feature = "ui")]
-use super::geometry::draw_rounded_rect;
 use super::heatmap::HEATMAP_SPACING;
+#[cfg(feature = "ui")]
+use crate::engine::models::EntryStatus;
 
 /// Number of columns in the monthly calendar heatmap (Monday through Sunday).
 pub const HEATMAP_COLS: usize = 7;

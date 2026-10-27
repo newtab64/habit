@@ -220,8 +220,18 @@ fn test_future_entry_filtering_in_metrics() {
     let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
     let entries = vec![
         HabitEntry::new(100, today, EntryStatus::Completed, 1.0),
-        HabitEntry::new(100, today + chrono::Duration::days(1), EntryStatus::Completed, 1.0),
-        HabitEntry::new(100, today + chrono::Duration::days(5), EntryStatus::Completed, 1.0),
+        HabitEntry::new(
+            100,
+            today + chrono::Duration::days(1),
+            EntryStatus::Completed,
+            1.0,
+        ),
+        HabitEntry::new(
+            100,
+            today + chrono::Duration::days(5),
+            EntryStatus::Completed,
+            1.0,
+        ),
     ];
 
     let metrics = calculate_habit_metrics(&habit, &entries, today);

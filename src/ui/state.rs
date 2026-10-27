@@ -1,10 +1,3 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fmt::Write as _;
-use std::path::PathBuf;
-use std::rc::Rc;
-use chrono::{Datelike, NaiveDate};
-use gtk4::prelude::*;
 use crate::engine::db::Database;
 use crate::engine::models::EntryStatus;
 use crate::engine::scoring::{calculate_habit_score, calculate_strength_history};
@@ -13,6 +6,13 @@ use crate::ui::habit_row::HabitRowWidget;
 use crate::ui::metrics::{
     calculate_habit_metrics, format_schedule_summary, format_target_summary, toggle_entry_state,
 };
+use chrono::{Datelike, NaiveDate};
+use gtk4::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Write as _;
+use std::path::PathBuf;
+use std::rc::Rc;
 
 /// Shared drawing caches across the UI components, holding RGBA colors, score curves, and heatmap entries.
 #[derive(Clone)]
@@ -181,7 +181,10 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     );
     for h in &habits {
         if let Some(hid) = h.id {
-            full_css.push_str(&crate::ui::habit_row::generate_row_css(hid, &h.accent_color));
+            full_css.push_str(&crate::ui::habit_row::generate_row_css(
+                hid,
+                &h.accent_color,
+            ));
         }
     }
     if let Some(hid) = inner.selected_habit_id {
@@ -277,15 +280,21 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
 
             inner.score_card_value.set_text(&metrics.score_percent);
-            inner.month_diff_card_value.set_text(&metrics.month_diff_text);
+            inner
+                .month_diff_card_value
+                .set_text(&metrics.month_diff_text);
             inner.year_diff_card_value.set_text(&metrics.year_diff_text);
-            inner.total_count_card_value.set_text(&metrics.total_count_text);
+            inner
+                .total_count_card_value
+                .set_text(&metrics.total_count_text);
 
             if metrics.month_diff >= 0.0 {
                 inner.month_diff_card_value.add_css_class("overview-accent");
                 inner.month_diff_card_value.remove_css_class("dim-label");
             } else {
-                inner.month_diff_card_value.remove_css_class("overview-accent");
+                inner
+                    .month_diff_card_value
+                    .remove_css_class("overview-accent");
                 inner.month_diff_card_value.add_css_class("dim-label");
             }
 
@@ -293,7 +302,9 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
                 inner.year_diff_card_value.add_css_class("overview-accent");
                 inner.year_diff_card_value.remove_css_class("dim-label");
             } else {
-                inner.year_diff_card_value.remove_css_class("overview-accent");
+                inner
+                    .year_diff_card_value
+                    .remove_css_class("overview-accent");
                 inner.year_diff_card_value.add_css_class("dim-label");
             }
 

@@ -252,10 +252,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     left_box.set_valign(gtk4::Align::Center);
 
     let title_label = gtk4::Label::new(None);
-    title_label.set_markup(&format!(
-        "<b>{}</b>",
-        gtk4::glib::markup_escape_text(name)
-    ));
+    title_label.set_markup(&format!("<b>{}</b>", gtk4::glib::markup_escape_text(name)));
     title_label.set_halign(gtk4::Align::Start);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");

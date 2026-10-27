@@ -390,7 +390,9 @@ pub fn connect_detail_actions(
         history_editor.open(&inner_edit_mode, &caches_edit_mode);
     });
 
-    details.history_editor.connect_controllers(inner_rc, caches, root_window);
+    details
+        .history_editor
+        .connect_controllers(inner_rc, caches, root_window);
 
     let inner_edit = Rc::clone(inner_rc);
     let caches_edit = caches.clone();

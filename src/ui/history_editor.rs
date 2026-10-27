@@ -141,8 +141,8 @@ impl HistoryEditorWidgets {
             let habit_id = habit.id.unwrap_or(0);
             *caches.editor_habit_id.borrow_mut() = Some(habit_id);
             *caches.editor_week_offset.borrow_mut() = 0;
-            let habit_color = Rgba::from_hex(&habit.accent_color)
-                .unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
+            let habit_color =
+                Rgba::from_hex(&habit.accent_color).unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
             *caches.editor_color.borrow_mut() = habit_color;
 
             let today = chrono::Local::now().date_naive();
@@ -230,7 +230,8 @@ impl HistoryEditorWidgets {
 
         // Scroll gesture on drawing area
         let scroll = gtk4::EventControllerScroll::new(
-            gtk4::EventControllerScrollFlags::VERTICAL | gtk4::EventControllerScrollFlags::HORIZONTAL,
+            gtk4::EventControllerScrollFlags::VERTICAL
+                | gtk4::EventControllerScrollFlags::HORIZONTAL,
         );
         let offset_scroll = Rc::clone(&caches.editor_week_offset);
         let area_scroll = self.drawing_area.clone();
@@ -257,7 +258,9 @@ impl HistoryEditorWidgets {
         let inner_click = Rc::clone(inner_rc);
         let caches_click = caches.clone();
         click_gesture.connect_pressed(move |_, _, x, y| {
-            let Some(habit_id) = *habit_id_click.borrow() else { return };
+            let Some(habit_id) = *habit_id_click.borrow() else {
+                return;
+            };
             let habit = {
                 let inner = inner_click.borrow();
                 let db = inner.db.borrow();
@@ -280,7 +283,9 @@ impl HistoryEditorWidgets {
                             None | Some(EntryStatus::Missed) => {
                                 (Some(EntryStatus::Completed), target_val, false)
                             }
-                            Some(EntryStatus::Completed) => (Some(EntryStatus::Skipped), 0.0, false),
+                            Some(EntryStatus::Completed) => {
+                                (Some(EntryStatus::Skipped), 0.0, false)
+                            }
                             Some(EntryStatus::Skipped) => (None, 0.0, true),
                         }
                     } else {

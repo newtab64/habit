@@ -1,12 +1,12 @@
 use chrono::Datelike;
 
 #[cfg(feature = "ui")]
-use crate::engine::models::EntryStatus;
+use super::geometry::draw_rounded_rect;
 use super::geometry::Rect;
 #[cfg(feature = "ui")]
 use super::geometry::Rgba;
 #[cfg(feature = "ui")]
-use super::geometry::draw_rounded_rect;
+use crate::engine::models::EntryStatus;
 
 /// Gap spacing between heatmap cells (in pixels).
 pub const HEATMAP_SPACING: f64 = 6.0;
