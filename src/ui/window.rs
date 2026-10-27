@@ -13,25 +13,19 @@ use libadwaita::prelude::*;
 #[cfg(feature = "ui")]
 use crate::engine::db::Database;
 #[cfg(feature = "ui")]
-pub use crate::ui::details::{
-    build_details, build_heatmap_section, build_overview_section, connect_detail_actions,
-    connect_drawing_areas, create_stat_column, DetailsWidgets,
+use crate::ui::details::{
+    build_details, connect_detail_actions, connect_drawing_areas, DetailsWidgets,
 };
 #[cfg(feature = "ui")]
 use crate::ui::habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
-pub use crate::ui::history_editor::{
-    build_history_editor, connect_history_editor, HistoryEditorWidgets,
-};
-#[cfg(feature = "ui")]
 use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog};
 #[cfg(feature = "ui")]
-pub use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
+use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
 #[cfg(feature = "ui")]
-pub use crate::ui::state::{
-    default_database_path, handle_select, handle_toggle, refresh, DrawCaches, WindowInner,
-};
+use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
 
+/// Connects user interface controllers, including the add habit dialog and detail view actions.
 #[cfg(feature = "ui")]
 fn connect_controllers(
     inner_rc: &Rc<RefCell<WindowInner>>,
@@ -70,6 +64,7 @@ fn connect_controllers(
     connect_detail_actions(inner_rc, caches, root_window, root_overlay, details);
 }
 
+/// Configures the primary window menu with backup export, import, and about actions.
 #[cfg(feature = "ui")]
 fn setup_primary_menu(
     window: &libadwaita::ApplicationWindow,
@@ -204,10 +199,10 @@ impl HabitWindow {
         let nav_view = libadwaita::NavigationView::new();
         nav_view.set_animate_transitions(false);
 
-        let sidebar = build_sidebar();
+        let sidebar: SidebarWidgets = build_sidebar();
         nav_view.add(&sidebar.page);
 
-        let details = build_details();
+        let details: DetailsWidgets = build_details();
         let details_clone = details.clone();
 
         let toast_overlay = libadwaita::ToastOverlay::new();
