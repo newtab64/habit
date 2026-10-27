@@ -170,7 +170,7 @@ fn build_schedule_group(
     Vec<(u8, libadwaita::SwitchRow)>,
 ) {
     let group = libadwaita::PreferencesGroup::new();
-    group.set_title("Schedule & Rest Days");
+    group.set_title("Schedule &amp; Rest Days");
     group.set_description(Some(
         "Unchecked days are pre-defined rest days (streaks preserved with no penalty)",
     ));
@@ -386,7 +386,7 @@ pub fn show_habit_dialog(
 
     let sheet_revealer = gtk4::Revealer::new();
     sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
-    sheet_revealer.set_transition_duration(250);
+    sheet_revealer.set_transition_duration(180);
     sheet_revealer.set_child(Some(&sheet_box));
     sheet_revealer.set_valign(gtk4::Align::End);
     sheet_revealer.set_hexpand(true);
@@ -402,7 +402,6 @@ pub fn show_habit_dialog(
         let mut is_closed = closed.borrow_mut();
         if !*is_closed {
             *is_closed = true;
-            container_for_close.remove_css_class("active");
             revealer_for_close.set_reveal_child(false);
             let overlay_rm = overlay_for_close.clone();
             let cont_rm = container_for_close.clone();
@@ -481,11 +480,5 @@ pub fn show_habit_dialog(
     });
 
     root_overlay.add_overlay(&dialog_container);
-
-    let rev_open = sheet_revealer;
-    let cont_open = dialog_container;
-    gtk4::glib::idle_add_local_once(move || {
-        cont_open.add_css_class("active");
-        rev_open.set_reveal_child(true);
-    });
+    sheet_revealer.set_reveal_child(true);
 }

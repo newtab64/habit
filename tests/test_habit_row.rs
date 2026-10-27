@@ -387,10 +387,6 @@ fn test_css_parsing_cleanliness() {
 
             // Also verify the bottom-sheet dimming & seamless docking CSS
             let sheet_css = ".editor-dimming-backdrop {\n\
-                  background-color: rgba(0, 0, 0, 0);\n\
-                  transition: background-color 250ms ease-out;\n\
-                }\n\
-                .editor-dimming-backdrop.active {\n\
                   background-color: rgba(0, 0, 0, 0.45);\n\
                 }\n\
                 .editor-bottom-sheet {\n\
@@ -399,7 +395,9 @@ fn test_css_parsing_cleanliness() {
                   border-top-right-radius: 16px;\n\
                   border-bottom-left-radius: 0;\n\
                   border-bottom-right-radius: 0;\n\
-                  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n\
+                  border: 1px solid rgba(0, 0, 0, 0.12);\n\
+                  border-bottom: none;\n\
+                  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n\
                   margin-left: 20px;\n\
                   margin-right: 20px;\n\
                   margin-bottom: 0;\n\

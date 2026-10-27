@@ -520,9 +520,8 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0);\n  transition: background-color 250ms ease-out;\n}\n\
-         .editor-dimming-backdrop.active {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n}\n\
+         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  border: 1px solid rgba(0, 0, 0, 0.12);\n  border-bottom: none;\n  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n}\n\
          button.destructive-action.flat,\n\
          button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
     );
@@ -1071,7 +1070,7 @@ fn build_details() -> DetailsWidgets {
 
     let sheet_revealer = gtk4::Revealer::new();
     sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
-    sheet_revealer.set_transition_duration(250);
+    sheet_revealer.set_transition_duration(180);
     sheet_revealer.set_child(Some(&sheet_box));
     sheet_revealer.set_valign(gtk4::Align::End);
     sheet_revealer.set_hexpand(true);
@@ -1199,12 +1198,7 @@ fn connect_controllers(
             details_edit_btn.editor_title.set_title(&habit.name);
             details_edit_btn.editor_drawing_area.queue_draw();
             details_edit_btn.editor_container.set_visible(true);
-            let rev_open = details_edit_btn.sheet_revealer.clone();
-            let cont_open = details_edit_btn.editor_container.clone();
-            gtk4::glib::idle_add_local_once(move || {
-                cont_open.add_css_class("active");
-                rev_open.set_reveal_child(true);
-            });
+            details_edit_btn.sheet_revealer.set_reveal_child(true);
         }
     });
 
@@ -1215,7 +1209,6 @@ fn connect_controllers(
         let caches_close = caches.clone();
         move || {
             if cont_close.is_visible() {
-                cont_close.remove_css_class("active");
                 rev_close.set_reveal_child(false);
                 if !rev_close.is_child_revealed() {
                     cont_close.set_visible(false);
