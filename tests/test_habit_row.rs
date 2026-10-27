@@ -137,13 +137,13 @@ fn test_bare_symbol_formatting_binary_habits() {
         }
     );
 
-    // Explicitly Skipped binary
+    // Explicitly Skipped binary -> "—" (dash, not "⏸")
     let entry_skipped = HabitEntry::new(1, date, EntryStatus::Skipped, 0.0);
     let sym_skipped = format_day_symbol(&habit, Some(&entry_skipped), date);
     assert_eq!(
         sym_skipped,
         DaySymbolDisplay {
-            text: "⏸".to_string(),
+            text: "—".to_string(),
             css_class: "symbol-rest",
             is_accent: true,
         }
@@ -246,13 +246,13 @@ fn test_bare_symbol_formatting_measurable_habits() {
         }
     );
 
-    // Skipped measurable day -> "⏸"
+    // Skipped measurable day -> "—" (dash, not "⏸")
     let entry_skipped = HabitEntry::new(2, date, EntryStatus::Skipped, 0.0);
     let sym_skipped = format_day_symbol(&habit, Some(&entry_skipped), date);
     assert_eq!(
         sym_skipped,
         DaySymbolDisplay {
-            text: "⏸".to_string(),
+            text: "—".to_string(),
             css_class: "symbol-rest",
             is_accent: true,
         }
@@ -418,4 +418,38 @@ fn test_css_parsing_cleanliness() {
             println!("GTK init failed: {e}");
         }
     }
+}
+
+#[test]
+fn test_three_states_only_and_no_pause_symbol() {
+    let habit = Habit::new("Exercise", HabitType::Binary, SCHEDULE_ALL_DAYS, "#3584E4").with_id(1);
+    let date = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
+
+    // 1. Completed state: (v) -> "✓"
+    let completed_entry = HabitEntry::new(1, date, EntryStatus::Completed, 1.0);
+    let completed_sym = format_day_symbol(&habit, Some(&completed_entry), date);
+    assert_eq!(completed_sym.text, "✓");
+    assert_ne!(completed_sym.text, "⏸");
+
+    // 2. Missed state: (X) -> "✕"
+    let missed_entry = HabitEntry::new(1, date, EntryStatus::Missed, 0.0);
+    let missed_sym = format_day_symbol(&habit, Some(&missed_entry), date);
+    assert_eq!(missed_sym.text, "✕");
+    assert_ne!(missed_sym.text, "⏸");
+
+    // 3. Skipped state: (-) -> "—"
+    let skipped_entry = HabitEntry::new(1, date, EntryStatus::Skipped, 0.0);
+    let skipped_sym = format_day_symbol(&habit, Some(&skipped_entry), date);
+    assert_eq!(skipped_sym.text, "—");
+    assert_ne!(skipped_sym.text, "⏸");
+
+    // Cycle transitions: Missed -> Completed -> Skipped -> Missed
+    let next_1 = next_toggle_status(None);
+    assert_eq!(next_1, EntryStatus::Completed);
+    let next_2 = next_toggle_status(Some(next_1));
+    assert_eq!(next_2, EntryStatus::Skipped);
+    let next_3 = next_toggle_status(Some(next_2));
+    assert_eq!(next_3, EntryStatus::Missed);
+    let next_4 = next_toggle_status(Some(next_3));
+    assert_eq!(next_4, EntryStatus::Completed);
 }

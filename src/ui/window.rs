@@ -126,12 +126,13 @@ fn setup_primary_menu(
         let caches_done = caches_imp.clone();
         trigger_import_dialog(&root_imp, db, move |res| match res {
             Ok(_path) => {
-                toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
                 {
                     let mut inner = inner_done.borrow_mut();
                     inner.selected_habit_id = None;
+                    let _ = inner.nav_view.pop_to_tag("habits");
                 }
                 refresh(&inner_done, &caches_done);
+                toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
             }
             Err(err) => {
                 if !err.contains("cancelled") && !err.contains("Dismissed") {

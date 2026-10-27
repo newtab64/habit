@@ -108,11 +108,11 @@ pub fn format_day_symbol(
 ) -> DaySymbolDisplay {
     let is_scheduled = habit.is_scheduled_on(date.weekday());
 
-    // Explicit manual skip always displays as rest pause symbol
+    // Explicit manual skip displays as rest dash symbol ("—")
     if let Some(e) = entry {
         if e.status == EntryStatus::Skipped {
             return DaySymbolDisplay {
-                text: "⏸".to_string(),
+                text: "—".to_string(),
                 css_class: "symbol-rest",
                 is_accent: true,
             };

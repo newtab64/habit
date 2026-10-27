@@ -117,12 +117,15 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
                         None::<&gtk4::gio::Cancellable>,
                         move |response| {
                             if response == "restore" {
-                                match db_clone.borrow_mut().restore_backup(&path) {
+                                let restore_res = db_clone.borrow_mut().restore_backup(&path);
+                                gtk4::glib::idle_add_local_once(move || match restore_res {
                                     Ok(()) => on_complete_cb(Ok(path)),
                                     Err(e) => on_complete_cb(Err(e.to_string())),
-                                }
+                                });
                             } else {
-                                on_complete_cb(Err("Backup restoration cancelled".to_string()));
+                                gtk4::glib::idle_add_local_once(move || {
+                                    on_complete_cb(Err("Backup restoration cancelled".to_string()));
+                                });
                             }
                         },
                     );
