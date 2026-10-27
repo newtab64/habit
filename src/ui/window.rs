@@ -365,8 +365,8 @@ struct WindowInner {
     header_day_labels: Vec<gtk4::Label>,
     habit_css_provider: gtk4::CssProvider,
     title_label: gtk4::Label,
-    subtitle_label: gtk4::Label,
-    color_badge: gtk4::Label,
+    schedule_label: gtk4::Label,
+    target_label: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
     ring_drawing_area: gtk4::DrawingArea,
@@ -395,8 +395,8 @@ struct SidebarWidgets {
 struct DetailsWidgets {
     page: libadwaita::NavigationPage,
     title_label: gtk4::Label,
-    subtitle_label: gtk4::Label,
-    color_badge: gtk4::Label,
+    schedule_label: gtk4::Label,
+    target_label: gtk4::Label,
     edit_btn: gtk4::Button,
     delete_btn: gtk4::Button,
     ring_drawing_area: gtk4::DrawingArea,
@@ -591,9 +591,11 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
             let sched_text = format_schedule_summary(selected_habit.scheduled_days);
             let target_text = format_target_summary(selected_habit);
             inner
-                .subtitle_label
-                .set_text(&format!("Schedule: {sched_text} • Target: {target_text}"));
-            inner.color_badge.set_text(&selected_habit.accent_color);
+                .schedule_label
+                .set_text(&format!("Schedule: {sched_text}"));
+            inner
+                .target_label
+                .set_text(&format!("Target: {target_text}"));
 
             let start_bound = NaiveDate::MIN;
             let all_entries = inner
@@ -936,18 +938,16 @@ fn build_details() -> DetailsWidgets {
     title_label.set_halign(gtk4::Align::Start);
     info_box.append(&title_label);
 
-    let sub_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-    sub_box.set_halign(gtk4::Align::Start);
+    let schedule_label = gtk4::Label::new(None);
+    schedule_label.add_css_class("dim-label");
+    schedule_label.set_halign(gtk4::Align::Start);
+    info_box.append(&schedule_label);
 
-    let subtitle_label = gtk4::Label::new(None);
-    subtitle_label.add_css_class("dim-label");
-    sub_box.append(&subtitle_label);
+    let target_label = gtk4::Label::new(None);
+    target_label.add_css_class("dim-label");
+    target_label.set_halign(gtk4::Align::Start);
+    info_box.append(&target_label);
 
-    let color_badge = gtk4::Label::new(None);
-    color_badge.add_css_class("caption");
-    color_badge.add_css_class("badge");
-    sub_box.append(&color_badge);
-    info_box.append(&sub_box);
     details_vbox.append(&info_box);
 
     let sep2 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
@@ -1002,8 +1002,8 @@ fn build_details() -> DetailsWidgets {
     DetailsWidgets {
         page,
         title_label,
-        subtitle_label,
-        color_badge,
+        schedule_label,
+        target_label,
         edit_btn,
         delete_btn,
         ring_drawing_area,
@@ -1604,8 +1604,8 @@ impl HabitWindow {
             header_day_labels: sidebar.header_day_labels,
             habit_css_provider,
             title_label: details.title_label,
-            subtitle_label: details.subtitle_label,
-            color_badge: details.color_badge,
+            schedule_label: details.schedule_label,
+            target_label: details.target_label,
             edit_btn: details.edit_btn.clone(),
             delete_btn: details.delete_btn.clone(),
             ring_drawing_area: details.ring_drawing_area,
