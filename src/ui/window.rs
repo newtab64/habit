@@ -176,15 +176,63 @@ pub struct HabitWindow {
 impl HabitWindow {
     /// Opens the application window using the default on-disk SQLite database path.
     ///
+    /// If opening the database fails, presents an alert dialog to the user displaying the
+    /// database path and error message, prompting the user to either quit or explicitly
+    /// opt into a temporary in-memory database where changes will not be saved.
+    ///
     /// # Panics
     /// Panics if opening an in-memory database fallback fails.
     #[must_use]
     pub fn open_default(app: &libadwaita::Application) -> Self {
         let db_path = default_database_path();
-        let db = Database::open(&db_path).unwrap_or_else(|_| {
-            Database::open_in_memory().expect("In-memory database fallback should always succeed")
-        });
-        Self::new(app, db)
+        match Database::open(&db_path) {
+            Ok(db) => Self::new(app, db),
+            Err(err) => {
+                eprintln!("Failed to open database at '{}': {err}", db_path.display());
+                let fallback_db = Database::open_in_memory()
+                    .expect("In-memory database fallback should always succeed");
+                let habit_window = Self::new(app, fallback_db);
+
+                let alert = libadwaita::AlertDialog::builder()
+                    .heading("Failed to Open Database")
+                    .body(format!(
+                        "Could not open habit database at:\n{}\n\nError: {err}\n\nDo you want to quit, or continue with a temporary in-memory database? Changes will NOT be saved to disk.",
+                        db_path.display()
+                    ))
+                    .build();
+                alert.add_response("quit", "Quit");
+                alert.add_response("temporary", "Use Temporary In-Memory DB");
+                alert.set_response_appearance(
+                    "temporary",
+                    libadwaita::ResponseAppearance::Destructive,
+                );
+                alert.set_default_response(Some("quit"));
+                alert.set_close_response("quit");
+
+                let win_clone = habit_window.window.clone();
+                let toast_clone = habit_window.toast_overlay.clone();
+                alert.choose(
+                    &habit_window.window,
+                    None::<&gtk4::gio::Cancellable>,
+                    move |response| {
+                        if response == "temporary" {
+                            let toast = libadwaita::Toast::new(
+                                "Using temporary in-memory database — data will NOT be saved",
+                            );
+                            toast.set_timeout(0);
+                            toast_clone.add_toast(toast);
+                        } else {
+                            if let Some(app) = win_clone.application() {
+                                app.quit();
+                            }
+                            win_clone.close();
+                        }
+                    },
+                );
+
+                habit_window
+            }
+        }
     }
 
     /// Creates and initializes the `HabitWindow` with the provided database instance.
