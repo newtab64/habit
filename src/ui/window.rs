@@ -425,16 +425,19 @@ struct DetailsWidgets {
 fn create_stat_column(value_label: &gtk4::Label, title: &str) -> gtk4::Box {
     let col = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     col.set_hexpand(true);
-    col.set_halign(gtk4::Align::Center);
+    col.set_halign(gtk4::Align::Fill);
+    col.set_valign(gtk4::Align::Center);
 
-    value_label.add_css_class("title-1");
+    value_label.add_css_class("title-2");
     value_label.set_halign(gtk4::Align::Center);
+    value_label.set_single_line_mode(true);
     col.append(value_label);
 
     let title_lbl = gtk4::Label::new(Some(title));
     title_lbl.add_css_class("dim-label");
     title_lbl.add_css_class("caption");
     title_lbl.set_halign(gtk4::Align::Center);
+    title_lbl.set_single_line_mode(true);
     col.append(&title_lbl);
 
     col
@@ -810,14 +813,15 @@ fn build_overview_section() -> (
     card.set_margin_bottom(2);
 
     let overview_title = gtk4::Label::new(Some("Overview"));
-    overview_title.add_css_class("heading");
+    overview_title.add_css_class("title-3");
     overview_title.add_css_class("overview-accent");
     overview_title.set_halign(gtk4::Align::Start);
     overview_title.set_margin_start(14);
-    overview_title.set_margin_top(10);
+    overview_title.set_margin_top(12);
     card.append(&overview_title);
 
-    let stats_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    let stats_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+    stats_box.set_homogeneous(true);
     stats_box.set_margin_start(8);
     stats_box.set_margin_end(8);
     stats_box.set_margin_bottom(12);
@@ -825,12 +829,14 @@ fn build_overview_section() -> (
 
     let ring_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     ring_box.set_valign(gtk4::Align::Center);
-    ring_box.set_halign(gtk4::Align::Center);
+    ring_box.set_halign(gtk4::Align::Fill);
     ring_box.set_hexpand(true);
 
     let ring_drawing_area = gtk4::DrawingArea::new();
     ring_drawing_area.set_content_width(38);
     ring_drawing_area.set_content_height(38);
+    ring_drawing_area.set_halign(gtk4::Align::Center);
+    ring_drawing_area.set_valign(gtk4::Align::Center);
     ring_box.append(&ring_drawing_area);
     stats_box.append(&ring_box);
 
