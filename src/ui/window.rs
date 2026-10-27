@@ -520,7 +520,7 @@ fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
          .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n  transition: none;\n  animation: none;\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 16px;\n  margin-right: 16px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
+         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n  margin-left: 20px;\n  margin-right: 20px;\n  margin-bottom: 0;\n  transition: none;\n  animation: none;\n}\n\
          .editor-bottom-sheet * {\n  transition: none;\n  animation: none;\n}\n\
          .editor-sheet-header {\n  border-bottom: 1px solid rgba(128, 128, 128, 0.15);\n  transition: none;\n  animation: none;\n}\n",
     );
@@ -1100,6 +1100,7 @@ fn connect_controllers(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
     root_window: &gtk4::Window,
+    root_overlay: &gtk4::Overlay,
     details: &DetailsWidgets,
     add_btn: &gtk4::Button,
 ) {
@@ -1299,11 +1300,11 @@ fn connect_controllers(
 
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
-    let win_add = root_window.clone();
+    let overlay_add = root_overlay.clone();
     add_btn.connect_clicked(move |_| {
         let inner_saved = Rc::clone(&inner_add);
         let caches_saved = caches_add.clone();
-        show_habit_dialog(&win_add, None, move |new_habit| {
+        show_habit_dialog(&overlay_add, None, move |new_habit| {
             let db = {
                 let inner = inner_saved.borrow();
                 Rc::clone(&inner.db)
@@ -1323,7 +1324,7 @@ fn connect_controllers(
         });
     });
 
-    connect_detail_actions(inner_rc, caches, root_window, details);
+    connect_detail_actions(inner_rc, caches, root_window, root_overlay, details);
 }
 
 #[cfg(feature = "ui")]
@@ -1331,11 +1332,12 @@ fn connect_detail_actions(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
     root_window: &gtk4::Window,
+    root_overlay: &gtk4::Overlay,
     details: &DetailsWidgets,
 ) {
     let inner_edit = Rc::clone(inner_rc);
     let caches_edit = caches.clone();
-    let win_edit = root_window.clone();
+    let overlay_edit = root_overlay.clone();
     details.edit_btn.connect_clicked(move |_| {
         let (selected_id, db) = {
             let inner = inner_edit.borrow();
@@ -1345,7 +1347,7 @@ fn connect_detail_actions(
         if let Some(habit) = habit_opt {
             let inner_saved = Rc::clone(&inner_edit);
             let caches_saved = caches_edit.clone();
-            show_habit_dialog(&win_edit, Some(&habit), move |updated_habit| {
+            show_habit_dialog(&overlay_edit, Some(&habit), move |updated_habit| {
                 let id_opt = updated_habit.id;
                 let db = {
                     let inner = inner_saved.borrow();
@@ -1612,7 +1614,10 @@ impl HabitWindow {
 
         let toast_overlay = libadwaita::ToastOverlay::new();
         toast_overlay.set_child(Some(&nav_view));
-        window.set_content(Some(&toast_overlay));
+
+        let root_overlay = gtk4::Overlay::new();
+        root_overlay.set_child(Some(&toast_overlay));
+        window.set_content(Some(&root_overlay));
 
         let now = chrono::Local::now();
         let today = now.date_naive();
@@ -1677,6 +1682,7 @@ impl HabitWindow {
             &inner_rc,
             &caches,
             &root_window,
+            &root_overlay,
             &details_clone,
             &sidebar.add_btn,
         );

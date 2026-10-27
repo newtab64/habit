@@ -301,15 +301,16 @@ fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, liba
     (group, hex_row)
 }
 
-/// Presents a native Libadwaita dialog for creating a new habit or editing an existing habit.
+/// Presents an in-window bottom-sheet panel for creating a new habit or editing an existing habit.
 ///
 /// # Arguments
-/// * `parent` - The parent window to which this modal dialog is transient.
+/// * `root_overlay` - The root overlay of the application window where this panel docks.
 /// * `habit` - `None` when creating a new habit, or `Some(&habit)` when editing.
 /// * `on_save` - Callback invoked with the validated `Habit` when confirmed.
 #[cfg(feature = "ui")]
+#[allow(clippy::too_many_lines)]
 pub fn show_habit_dialog(
-    parent: &gtk4::Window,
+    root_overlay: &gtk4::Overlay,
     habit: Option<&Habit>,
     on_save: impl Fn(Habit) + 'static,
 ) {
@@ -319,28 +320,37 @@ pub fn show_habit_dialog(
         "New Habit"
     };
 
-    let window = libadwaita::Window::builder()
-        .transient_for(parent)
-        .modal(true)
-        .title(title)
-        .default_width(460)
-        .default_height(580)
-        .build();
+    let dialog_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    dialog_container.add_css_class("editor-dimming-backdrop");
 
-    let toolbar_view = libadwaita::ToolbarView::new();
+    let dialog_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    dialog_dimming.set_vexpand(true);
+    dialog_dimming.set_hexpand(true);
+    dialog_container.append(&dialog_dimming);
 
-    let header = libadwaita::HeaderBar::new();
-    let window_title = libadwaita::WindowTitle::new(title, "");
-    header.set_title_widget(Some(&window_title));
+    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    sheet_box.set_valign(gtk4::Align::End);
+    sheet_box.set_hexpand(true);
+    sheet_box.add_css_class("editor-bottom-sheet");
+
+    let sheet_header = gtk4::CenterBox::new();
+    sheet_header.add_css_class("editor-sheet-header");
+    sheet_header.set_margin_start(16);
+    sheet_header.set_margin_end(16);
+    sheet_header.set_margin_top(10);
+    sheet_header.set_margin_bottom(6);
 
     let cancel_btn = gtk4::Button::with_label("Cancel");
-    header.pack_start(&cancel_btn);
+    cancel_btn.add_css_class("flat");
+    sheet_header.set_start_widget(Some(&cancel_btn));
+
+    let window_title = libadwaita::WindowTitle::new(title, "");
+    sheet_header.set_center_widget(Some(&window_title));
 
     let save_btn = gtk4::Button::with_label("Save");
     save_btn.add_css_class("suggested-action");
-    header.pack_end(&save_btn);
-
-    toolbar_view.add_top_bar(&header);
+    sheet_header.set_end_widget(Some(&save_btn));
+    sheet_box.append(&sheet_header);
 
     let pref_page = libadwaita::PreferencesPage::new();
 
@@ -360,17 +370,55 @@ pub fn show_habit_dialog(
 
     let toast_overlay = libadwaita::ToastOverlay::new();
     toast_overlay.set_child(Some(&pref_page));
-    toolbar_view.set_content(Some(&toast_overlay));
-    window.set_content(Some(&toolbar_view));
 
-    let win_cancel = window.clone();
+    let scrolled = gtk4::ScrolledWindow::new();
+    scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
+    scrolled.set_vscrollbar_policy(gtk4::PolicyType::Automatic);
+    scrolled.set_max_content_height(480);
+    scrolled.set_propagate_natural_height(true);
+    scrolled.set_margin_bottom(12);
+    scrolled.set_child(Some(&toast_overlay));
+    sheet_box.append(&scrolled);
+
+    dialog_container.append(&sheet_box);
+
+    let closed = std::rc::Rc::new(std::cell::RefCell::new(false));
+    let overlay_for_close = root_overlay.clone();
+    let container_for_close = dialog_container.clone();
+    let close_dialog = move || {
+        let mut is_closed = closed.borrow_mut();
+        if !*is_closed {
+            *is_closed = true;
+            overlay_for_close.remove_overlay(&container_for_close);
+        }
+    };
+
+    let close_cancel = close_dialog.clone();
     cancel_btn.connect_clicked(move |_| {
-        win_cancel.close();
+        close_cancel();
     });
 
-    let win_save = window.clone();
-    let habit_orig = habit.cloned();
+    let close_dimming = close_dialog.clone();
+    let dim_gesture = gtk4::GestureClick::new();
+    dim_gesture.connect_pressed(move |_, _, _, _| {
+        close_dimming();
+    });
+    dialog_dimming.add_controller(dim_gesture);
 
+    let close_key = close_dialog.clone();
+    let key_controller = gtk4::EventControllerKey::new();
+    key_controller.connect_key_pressed(move |_, key, _, _| {
+        if key == gtk4::gdk::Key::Escape {
+            close_key();
+            gtk4::glib::Propagation::Stop
+        } else {
+            gtk4::glib::Propagation::Proceed
+        }
+    });
+    dialog_container.add_controller(key_controller);
+
+    let habit_orig = habit.cloned();
+    let close_save = close_dialog;
     save_btn.connect_clicked(move |_| {
         let name = name_row.text().to_string();
         let is_meas = type_row.selected() == 1;
@@ -393,7 +441,7 @@ pub fn show_habit_dialog(
                     validated_habit.archived = orig.archived;
                     validated_habit.created_at = orig.created_at;
                 }
-                win_save.close();
+                close_save();
                 on_save(validated_habit);
             }
             Err(err) => {
@@ -404,5 +452,5 @@ pub fn show_habit_dialog(
         }
     });
 
-    window.present();
+    root_overlay.add_overlay(&dialog_container);
 }

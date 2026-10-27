@@ -310,7 +310,7 @@ pub fn calculate_loop_heatmap_layout(
     week_offset: usize,
 ) -> LoopHeatmapLayout {
     let padding = 8.0;
-    let square_spacing = 2.0;
+    let square_spacing = 4.0;
     let weekday_col_width = 18.0;
 
     let avail_h = (height - 2.0 * padding).max(24.0);

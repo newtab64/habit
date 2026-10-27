@@ -398,8 +398,8 @@ fn test_css_parsing_cleanliness() {
                   border-bottom-left-radius: 0;\n\
                   border-bottom-right-radius: 0;\n\
                   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);\n\
-                  margin-left: 16px;\n\
-                  margin-right: 16px;\n\
+                  margin-left: 20px;\n\
+                  margin-right: 20px;\n\
                   margin-bottom: 0;\n\
                   transition: none;\n\
                   animation: none;\n\
