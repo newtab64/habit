@@ -57,6 +57,7 @@ impl DrawCaches {
 pub struct WindowInner {
     pub nav_view: libadwaita::NavigationView,
     pub details_page: libadwaita::NavigationPage,
+    pub toast_overlay: libadwaita::ToastOverlay,
     pub db: Rc<Database>,
     pub selected_habit_id: Option<i64>,
     pub heatmap_week_offset: usize,
@@ -116,11 +117,22 @@ pub fn handle_toggle(
 
     if let Some(habit) = habit {
         let (status, val) = toggle_entry_state(&habit, current_entry.as_ref(), val_opt);
-        {
+        let write_res = {
             let inner = inner_rc.borrow();
-            let _ = inner.db.log_entry(habit_id, date, status, val);
+            inner.db.log_entry(habit_id, date, status, val)
+        };
+        match write_res {
+            Ok(()) => refresh(inner_rc, caches),
+            Err(e) => {
+                eprintln!("Failed to log entry: {e}");
+                let inner = inner_rc.borrow();
+                inner
+                    .toast_overlay
+                    .add_toast(libadwaita::Toast::new(&format!(
+                        "Failed to record entry: {e}"
+                    )));
+            }
         }
-        refresh(inner_rc, caches);
     }
 }
 
@@ -213,7 +225,7 @@ fn rebuild_habit_list(
     }
 
     for habit in habits {
-        let habit_id = habit.id.unwrap_or(0);
+        let Some(habit_id) = habit.id else { continue };
         let start_bound = NaiveDate::MIN;
         let entries = inner
             .db
@@ -233,7 +245,11 @@ fn rebuild_habit_list(
             handle_select(&inner_sel, &caches_sel, hid);
         };
 
-        let row_widget = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select);
+        let Some(row_widget) =
+            HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select)
+        else {
+            continue;
+        };
         left_group.add_widget(&row_widget.left_box);
         for (i, btn) in row_widget.day_buttons.iter().enumerate() {
             if let Some(sg) = col_groups.get(i) {
@@ -278,7 +294,9 @@ fn update_charts(
     let offset_weeks = i64::try_from(inner.heatmap_week_offset).unwrap_or(0);
     let weeks_back = offset_weeks + 104;
     let heatmap_start = today - chrono::Duration::weeks(weeks_back);
-    let sel_id = selected_habit.id.unwrap_or(0);
+    let Some(sel_id) = selected_habit.id else {
+        return;
+    };
     let h_entries = inner
         .db
         .get_entries(sel_id, heatmap_start, today)

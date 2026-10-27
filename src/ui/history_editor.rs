@@ -138,7 +138,7 @@ impl HistoryEditorWidgets {
             (h, e)
         };
         if let Some(habit) = habit_opt {
-            let habit_id = habit.id.unwrap_or(0);
+            let Some(habit_id) = habit.id else { return };
             *caches.editor_habit_id.borrow_mut() = Some(habit_id);
             *caches.editor_week_offset.borrow_mut() = 0;
             let habit_color =
@@ -298,24 +298,39 @@ impl HistoryEditorWidgets {
                         }
                     };
 
-                    {
+                    let write_res = {
                         let inner = inner_click.borrow();
                         let db = &inner.db;
                         if delete_db {
-                            let _ = db.delete_entry(habit_id, clicked_date);
+                            db.delete_entry(habit_id, clicked_date)
                         } else if let Some(status) = new_status {
-                            let _ = db.log_entry(habit_id, clicked_date, status, new_val);
-                        }
-
-                        if let Some(status) = new_status {
-                            entries_click.borrow_mut().insert(clicked_date, status);
+                            db.log_entry(habit_id, clicked_date, status, new_val)
                         } else {
-                            entries_click.borrow_mut().remove(&clicked_date);
+                            Ok(())
+                        }
+                    };
+
+                    match write_res {
+                        Ok(()) => {
+                            if let Some(status) = new_status {
+                                entries_click.borrow_mut().insert(clicked_date, status);
+                            } else {
+                                entries_click.borrow_mut().remove(&clicked_date);
+                            }
+
+                            area_click.queue_draw();
+                            refresh(&inner_click, &caches_click);
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to update habit entry: {e}");
+                            let inner = inner_click.borrow();
+                            inner
+                                .toast_overlay
+                                .add_toast(libadwaita::Toast::new(&format!(
+                                    "Failed to save history: {e}"
+                                )));
                         }
                     }
-
-                    area_click.queue_draw();
-                    refresh(&inner_click, &caches_click);
                 }
             }
         });

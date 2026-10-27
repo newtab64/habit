@@ -282,6 +282,7 @@ impl HabitWindow {
         let inner = WindowInner {
             nav_view: nav_view.clone(),
             details_page: details.page.clone(),
+            toast_overlay: toast_overlay.clone(),
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
             heatmap_week_offset: 0,

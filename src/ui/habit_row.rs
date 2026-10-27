@@ -350,12 +350,12 @@ impl HabitRowWidget {
         today: NaiveDate,
         on_toggle: F1,
         on_select: F2,
-    ) -> Self
+    ) -> Option<Self>
     where
         F1: Fn(i64, NaiveDate, Option<f64>) + 'static,
         F2: Fn(i64) + 'static,
     {
-        let habit_id = habit.id.unwrap_or(0);
+        let habit_id = habit.id?;
         let on_toggle = std::rc::Rc::new(on_toggle);
 
         // Main horizontal container with clean compact gap between habit info and tickboxes
@@ -426,14 +426,14 @@ impl HabitRowWidget {
 
         container.append(&days_box);
 
-        Self {
+        Some(Self {
             container,
             left_box,
             title_label,
             progress_bar,
             days_box,
             day_buttons,
-        }
+        })
     }
 
     /// Returns a reference to the root `gtk4::Box` widget.
