@@ -472,15 +472,3 @@ fn test_target_index_for_drag_y_midpoint_crossing() {
         3
     );
 }
-
-#[test]
-fn test_is_habit_order_unchanged() {
-    assert!(habit::ui::habit_row::is_habit_order_unchanged(
-        &[1, 2, 3],
-        &[1, 2, 3]
-    ));
-    assert!(!habit::ui::habit_row::is_habit_order_unchanged(
-        &[1, 2, 3],
-        &[2, 1, 3]
-    ));
-}

@@ -561,12 +561,6 @@ pub fn target_index_for_drag_y(
     target
 }
 
-/// Returns `true` when the staged habit order is identical to the initial order.
-#[must_use]
-pub fn is_habit_order_unchanged(initial: &[i64], staged: &[i64]) -> bool {
-    initial == staged
-}
-
 /// Moves `dragged_id` to the position occupied by `target_id` inside `order`.
 ///
 /// Returns `true` if `order` was modified, or `false` if `dragged_id == target_id`

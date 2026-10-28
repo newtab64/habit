@@ -30,7 +30,6 @@ pub struct DrawCaches {
     pub editor_color: Rc<RefCell<Rgba>>,
     pub editor_habit_id: Rc<RefCell<Option<i64>>>,
     pub reorder_mode: Rc<RefCell<bool>>,
-    pub initial_habit_order: Rc<RefCell<Vec<i64>>>,
     pub staged_habit_order: Rc<RefCell<Vec<i64>>>,
 }
 
@@ -52,7 +51,6 @@ impl DrawCaches {
             editor_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
             editor_habit_id: Rc::new(RefCell::new(None)),
             reorder_mode: Rc::new(RefCell::new(false)),
-            initial_habit_order: Rc::new(RefCell::new(Vec::new())),
             staged_habit_order: Rc::new(RefCell::new(Vec::new())),
         }
     }

@@ -29,66 +29,29 @@ use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
 fn connect_lock_button(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
-    root_window: &gtk4::Window,
     lock_btn: &gtk4::Button,
 ) {
     let inner_lock = Rc::clone(inner_rc);
     let caches_lock = caches.clone();
-    let win_lock = root_window.clone();
     lock_btn.connect_clicked(move |_| {
         let is_reorder = *caches_lock.reorder_mode.borrow();
         if is_reorder {
-            let unchanged = crate::ui::habit_row::is_habit_order_unchanged(
-                &caches_lock.initial_habit_order.borrow(),
-                &caches_lock.staged_habit_order.borrow(),
-            );
-            if unchanged {
-                *caches_lock.reorder_mode.borrow_mut() = false;
-                caches_lock.initial_habit_order.borrow_mut().clear();
-                caches_lock.staged_habit_order.borrow_mut().clear();
-                refresh(&inner_lock, &caches_lock);
-                return;
+            let staged = caches_lock.staged_habit_order.borrow().clone();
+            let db = {
+                let inner = inner_lock.borrow();
+                Rc::clone(&inner.db)
+            };
+            if let Err(e) = db.reorder_habits(&staged) {
+                eprintln!("Failed to reorder habits: {e}");
+                let inner = inner_lock.borrow();
+                inner
+                    .toast_overlay
+                    .add_toast(libadwaita::Toast::new(&format!(
+                        "Failed to save habit order: {e}"
+                    )));
             }
-
-            let alert = libadwaita::AlertDialog::new(
-                Some("Save Habit Order?"),
-                Some("Do you want to save the new habit order or discard your changes?"),
-            );
-            alert.add_response("discard", "Discard");
-            alert.add_response("save", "Save");
-            alert.set_response_appearance("discard", libadwaita::ResponseAppearance::Destructive);
-            alert.set_response_appearance("save", libadwaita::ResponseAppearance::Suggested);
-            alert.set_default_response(Some("save"));
-
-            let inner_cb = Rc::clone(&inner_lock);
-            let caches_cb = caches_lock.clone();
-            alert.choose(&win_lock, gtk4::gio::Cancellable::NONE, move |response| {
-                if response == "save" {
-                    let staged = caches_cb.staged_habit_order.borrow().clone();
-                    let db = {
-                        let inner = inner_cb.borrow();
-                        Rc::clone(&inner.db)
-                    };
-                    if let Err(e) = db.reorder_habits(&staged) {
-                        eprintln!("Failed to reorder habits: {e}");
-                        let inner = inner_cb.borrow();
-                        inner
-                            .toast_overlay
-                            .add_toast(libadwaita::Toast::new(&format!(
-                                "Failed to save habit order: {e}"
-                            )));
-                    }
-                    *caches_cb.reorder_mode.borrow_mut() = false;
-                    caches_cb.initial_habit_order.borrow_mut().clear();
-                    caches_cb.staged_habit_order.borrow_mut().clear();
-                    refresh(&inner_cb, &caches_cb);
-                } else if response == "discard" {
-                    *caches_cb.reorder_mode.borrow_mut() = false;
-                    caches_cb.initial_habit_order.borrow_mut().clear();
-                    caches_cb.staged_habit_order.borrow_mut().clear();
-                    refresh(&inner_cb, &caches_cb);
-                }
-            });
+            *caches_lock.reorder_mode.borrow_mut() = false;
+            caches_lock.staged_habit_order.borrow_mut().clear();
         } else {
             let ids: Vec<i64> = {
                 let inner = inner_lock.borrow();
@@ -100,14 +63,10 @@ fn connect_lock_button(
                     .filter_map(|h| h.id)
                     .collect()
             };
-            caches_lock
-                .initial_habit_order
-                .borrow_mut()
-                .clone_from(&ids);
             *caches_lock.staged_habit_order.borrow_mut() = ids;
             *caches_lock.reorder_mode.borrow_mut() = true;
-            refresh(&inner_lock, &caches_lock);
         }
+        refresh(&inner_lock, &caches_lock);
     });
 }
 
@@ -122,7 +81,7 @@ fn connect_controllers(
     lock_btn: &gtk4::Button,
     add_btn: &gtk4::Button,
 ) {
-    connect_lock_button(inner_rc, caches, root_window, lock_btn);
+    connect_lock_button(inner_rc, caches, lock_btn);
 
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
