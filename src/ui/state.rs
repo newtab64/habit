@@ -29,6 +29,8 @@ pub struct DrawCaches {
     pub editor_week_offset: Rc<RefCell<usize>>,
     pub editor_color: Rc<RefCell<Rgba>>,
     pub editor_habit_id: Rc<RefCell<Option<i64>>>,
+    pub reorder_mode: Rc<RefCell<bool>>,
+    pub staged_habit_order: Rc<RefCell<Vec<i64>>>,
 }
 
 impl DrawCaches {
@@ -48,6 +50,8 @@ impl DrawCaches {
             editor_week_offset: Rc::new(RefCell::new(0)),
             editor_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
             editor_habit_id: Rc::new(RefCell::new(None)),
+            reorder_mode: Rc::new(RefCell::new(false)),
+            staged_habit_order: Rc::new(RefCell::new(Vec::new())),
         }
     }
 }
@@ -60,6 +64,8 @@ pub struct WindowInner {
     pub toast_overlay: libadwaita::ToastOverlay,
     pub db: Rc<Database>,
     pub selected_habit_id: Option<i64>,
+    pub lock_btn: gtk4::Button,
+    pub add_btn: gtk4::Button,
     pub habits_list_box: gtk4::Box,
     pub habit_score_label: gtk4::Label,
     pub header_day_labels: Vec<gtk4::Label>,
@@ -135,6 +141,9 @@ pub fn handle_toggle(
 
 /// Handles selecting a habit and optionally navigating to its details view.
 pub fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, habit_id: i64) {
+    if *caches.reorder_mode.borrow() {
+        return;
+    }
     let (nav_view, details_page, should_push) = {
         let mut inner = inner_rc.borrow_mut();
         inner.selected_habit_id = Some(habit_id);
@@ -165,6 +174,7 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
     let mut full_css = String::from(
         ".habit-title {\n  font-weight: 700;\n}\n\
          .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n}\n\
+         .drop-target-hover {\n  background-color: rgba(53, 132, 228, 0.16);\n  border-radius: 8px;\n}\n\
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
@@ -222,7 +232,40 @@ fn rebuild_habit_list(
         inner.habits_list_box.remove(&child);
     }
 
-    for habit in habits {
+    let is_reorder = *caches.reorder_mode.borrow();
+    inner.lock_btn.set_icon_name(if is_reorder {
+        "changes-allow-symbolic"
+    } else {
+        "changes-prevent-symbolic"
+    });
+    inner.lock_btn.set_tooltip_text(Some(if is_reorder {
+        "Lock and Save Habit Order"
+    } else {
+        "Unlock to Reorder Habits"
+    }));
+    inner.add_btn.set_sensitive(!is_reorder);
+
+    let ordered_habits: Vec<Habit> = if is_reorder {
+        let staged = caches.staged_habit_order.borrow().clone();
+        let mut list = Vec::with_capacity(habits.len());
+        for id in &staged {
+            if let Some(h) = habits.iter().find(|h| h.id == Some(*id)) {
+                list.push(h.clone());
+            }
+        }
+        for h in habits {
+            if let Some(id) = h.id {
+                if !staged.contains(&id) {
+                    list.push(h.clone());
+                }
+            }
+        }
+        list
+    } else {
+        habits.to_vec()
+    };
+
+    for habit in &ordered_habits {
         let Some(habit_id) = habit.id else { continue };
         let start_bound = NaiveDate::MIN;
         let entries = inner
@@ -248,6 +291,24 @@ fn rebuild_habit_list(
         else {
             continue;
         };
+        if is_reorder {
+            let inner_drop = Rc::clone(inner_rc);
+            let caches_drop = caches.clone();
+            row_widget.enable_reorder_drag(habit_id, move |dragged_id, target_id| {
+                let changed = crate::ui::habit_row::move_habit_in_order(
+                    &mut caches_drop.staged_habit_order.borrow_mut(),
+                    dragged_id,
+                    target_id,
+                );
+                if changed {
+                    let inner_idle = Rc::clone(&inner_drop);
+                    let caches_idle = caches_drop.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        refresh(&inner_idle, &caches_idle);
+                    });
+                }
+            });
+        }
         left_group.add_widget(&row_widget.left_box);
         for (i, btn) in row_widget.day_buttons.iter().enumerate() {
             if let Some(sg) = col_groups.get(i) {

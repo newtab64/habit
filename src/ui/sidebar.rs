@@ -18,6 +18,8 @@ pub struct SidebarWidgets {
     pub habit_score_label: gtk4::Label,
     /// Header labels for the 5 quick-check dates.
     pub header_day_labels: Vec<gtk4::Label>,
+    /// Header bar button to lock/unlock habit reordering.
+    pub lock_btn: gtk4::Button,
     /// Header bar button to add a new habit.
     pub add_btn: gtk4::Button,
     /// Header bar button to open the primary menu.
@@ -32,6 +34,11 @@ pub fn build_sidebar() -> SidebarWidgets {
     let sidebar_header = libadwaita::HeaderBar::new();
     let sidebar_title = libadwaita::WindowTitle::new("Habits", "");
     sidebar_header.set_title_widget(Some(&sidebar_title));
+
+    let lock_btn = gtk4::Button::from_icon_name("changes-prevent-symbolic");
+    lock_btn.set_tooltip_text(Some("Unlock to Reorder Habits"));
+    lock_btn.add_css_class("flat");
+    sidebar_header.pack_start(&lock_btn);
 
     let add_btn = gtk4::Button::from_icon_name("list-add-symbolic");
     add_btn.set_tooltip_text(Some("New Habit"));
@@ -104,6 +111,7 @@ pub fn build_sidebar() -> SidebarWidgets {
         habits_list_box,
         habit_score_label,
         header_day_labels,
+        lock_btn,
         add_btn,
         menu_btn,
     }

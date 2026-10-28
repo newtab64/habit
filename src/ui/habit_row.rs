@@ -417,6 +417,69 @@ impl HabitRowWidget {
     pub const fn widget(&self) -> &gtk4::Box {
         &self.container
     }
+
+    /// Configures this row for drag-and-drop reordering: prepends a drag handle icon,
+    /// disables the 5 day tickboxes, and attaches `DragSource` and `DropTarget` controllers.
+    pub fn enable_reorder_drag<F>(&self, habit_id: i64, on_drop: F)
+    where
+        F: Fn(i64, i64) + 'static,
+    {
+        let drag_icon = gtk4::Image::from_icon_name("list-drag-handle-symbolic");
+        drag_icon.add_css_class("drag-handle");
+        drag_icon.add_css_class("dim-label");
+        drag_icon.set_valign(gtk4::Align::Center);
+        self.left_box.prepend(&drag_icon);
+
+        self.days_box.set_sensitive(false);
+
+        let drag_source = gtk4::DragSource::new();
+        drag_source.set_actions(gtk4::gdk::DragAction::MOVE);
+        drag_source.connect_prepare(move |_src, _x, _y| {
+            Some(gtk4::gdk::ContentProvider::for_value(&habit_id.to_value()))
+        });
+        self.container.add_controller(drag_source);
+
+        let drop_target = gtk4::DropTarget::new(i64::static_type(), gtk4::gdk::DragAction::MOVE);
+        let row_enter = self.container.clone();
+        drop_target.connect_enter(move |_, _, _| {
+            row_enter.add_css_class("drop-target-hover");
+            gtk4::gdk::DragAction::MOVE
+        });
+
+        let row_leave = self.container.clone();
+        drop_target.connect_leave(move |_| {
+            row_leave.remove_css_class("drop-target-hover");
+        });
+
+        let row_drop = self.container.clone();
+        drop_target.connect_drop(move |_, val, _, _| {
+            row_drop.remove_css_class("drop-target-hover");
+            val.get::<i64>().is_ok_and(|dragged_id| {
+                on_drop(dragged_id, habit_id);
+                true
+            })
+        });
+        self.container.add_controller(drop_target);
+    }
+}
+
+/// Moves `dragged_id` to the position occupied by `target_id` inside `order`.
+///
+/// Returns `true` if `order` was modified, or `false` if `dragged_id == target_id`
+/// or either ID is not present in `order`.
+pub fn move_habit_in_order(order: &mut Vec<i64>, dragged_id: i64, target_id: i64) -> bool {
+    if dragged_id == target_id {
+        return false;
+    }
+    let Some(from_idx) = order.iter().position(|&id| id == dragged_id) else {
+        return false;
+    };
+    let Some(to_idx) = order.iter().position(|&id| id == target_id) else {
+        return false;
+    };
+    let item = order.remove(from_idx);
+    order.insert(to_idx, item);
+    true
 }
 
 #[cfg(feature = "ui")]

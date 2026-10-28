@@ -406,3 +406,32 @@ fn test_three_states_only_and_no_pause_symbol() {
     let next_4 = next_toggle_status(Some(next_3));
     assert_eq!(next_4, EntryStatus::Completed);
 }
+
+#[test]
+fn test_move_habit_in_order() {
+    let mut order = vec![10, 20, 30, 40];
+
+    // Move 40 to position of 20 (upwards)
+    assert!(habit::ui::habit_row::move_habit_in_order(
+        &mut order, 40, 20
+    ));
+    assert_eq!(order, vec![10, 40, 20, 30]);
+
+    // Move 10 to position of 30 (downwards)
+    assert!(habit::ui::habit_row::move_habit_in_order(
+        &mut order, 10, 30
+    ));
+    assert_eq!(order, vec![40, 20, 30, 10]);
+
+    // Dragging onto self is a no-op
+    assert!(!habit::ui::habit_row::move_habit_in_order(
+        &mut order, 20, 20
+    ));
+    assert_eq!(order, vec![40, 20, 30, 10]);
+
+    // Unknown ID is a no-op
+    assert!(!habit::ui::habit_row::move_habit_in_order(
+        &mut order, 99, 20
+    ));
+    assert_eq!(order, vec![40, 20, 30, 10]);
+}

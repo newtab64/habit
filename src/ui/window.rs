@@ -25,6 +25,74 @@ use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
 #[cfg(feature = "ui")]
 use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
 
+#[cfg(feature = "ui")]
+fn connect_lock_button(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    root_window: &gtk4::Window,
+    lock_btn: &gtk4::Button,
+) {
+    let inner_lock = Rc::clone(inner_rc);
+    let caches_lock = caches.clone();
+    let win_lock = root_window.clone();
+    lock_btn.connect_clicked(move |_| {
+        let is_reorder = *caches_lock.reorder_mode.borrow();
+        if is_reorder {
+            let alert = libadwaita::AlertDialog::new(
+                Some("Save Habit Order?"),
+                Some("Do you want to save the new habit order or discard your changes?"),
+            );
+            alert.add_response("discard", "Discard");
+            alert.add_response("save", "Save");
+            alert.set_response_appearance("discard", libadwaita::ResponseAppearance::Destructive);
+            alert.set_response_appearance("save", libadwaita::ResponseAppearance::Suggested);
+            alert.set_default_response(Some("save"));
+
+            let inner_cb = Rc::clone(&inner_lock);
+            let caches_cb = caches_lock.clone();
+            alert.choose(&win_lock, gtk4::gio::Cancellable::NONE, move |response| {
+                if response == "save" {
+                    let staged = caches_cb.staged_habit_order.borrow().clone();
+                    let db = {
+                        let inner = inner_cb.borrow();
+                        Rc::clone(&inner.db)
+                    };
+                    if let Err(e) = db.reorder_habits(&staged) {
+                        eprintln!("Failed to reorder habits: {e}");
+                        let inner = inner_cb.borrow();
+                        inner
+                            .toast_overlay
+                            .add_toast(libadwaita::Toast::new(&format!(
+                                "Failed to save habit order: {e}"
+                            )));
+                    }
+                    *caches_cb.reorder_mode.borrow_mut() = false;
+                    caches_cb.staged_habit_order.borrow_mut().clear();
+                    refresh(&inner_cb, &caches_cb);
+                } else if response == "discard" {
+                    *caches_cb.reorder_mode.borrow_mut() = false;
+                    caches_cb.staged_habit_order.borrow_mut().clear();
+                    refresh(&inner_cb, &caches_cb);
+                }
+            });
+        } else {
+            let ids: Vec<i64> = {
+                let inner = inner_lock.borrow();
+                inner
+                    .db
+                    .get_habits()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|h| h.id)
+                    .collect()
+            };
+            *caches_lock.staged_habit_order.borrow_mut() = ids;
+            *caches_lock.reorder_mode.borrow_mut() = true;
+            refresh(&inner_lock, &caches_lock);
+        }
+    });
+}
+
 /// Connects user interface controllers, including the add habit dialog and detail view actions.
 #[cfg(feature = "ui")]
 fn connect_controllers(
@@ -33,8 +101,11 @@ fn connect_controllers(
     root_window: &gtk4::Window,
     root_overlay: &gtk4::Overlay,
     details: &DetailsWidgets,
+    lock_btn: &gtk4::Button,
     add_btn: &gtk4::Button,
 ) {
+    connect_lock_button(inner_rc, caches, root_window, lock_btn);
+
     let inner_add = Rc::clone(inner_rc);
     let caches_add = caches.clone();
     let overlay_add = root_overlay.clone();
@@ -285,6 +356,8 @@ impl HabitWindow {
             toast_overlay: toast_overlay.clone(),
             db: Rc::clone(&db_rc),
             selected_habit_id: None,
+            lock_btn: sidebar.lock_btn.clone(),
+            add_btn: sidebar.add_btn.clone(),
             habits_list_box: sidebar.habits_list_box,
             habit_score_label: sidebar.habit_score_label,
             header_day_labels: sidebar.header_day_labels,
@@ -314,6 +387,7 @@ impl HabitWindow {
             &root_window,
             &root_overlay,
             &details_clone,
+            &sidebar.lock_btn,
             &sidebar.add_btn,
         );
 
