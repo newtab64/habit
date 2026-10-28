@@ -170,7 +170,7 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
          .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
          .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  border: 1px solid rgba(0, 0, 0, 0.12);\n  border-bottom: none;\n  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n}\n\
-         button.quick-preset-btn {\n  font-size: 12px;\n  padding-left: 6px;\n  padding-right: 6px;\n  padding-top: 2px;\n  padding-bottom: 2px;\n  min-height: 24px;\n}\n\
+         button.quick-preset-btn {\n  font-size: 13px;\n  font-weight: 600;\n  padding-left: 10px;\n  padding-right: 10px;\n  padding-top: 4px;\n  padding-bottom: 4px;\n  min-height: 28px;\n  border-radius: 8px;\n}\n\
          button.destructive-action.flat,\n\
          button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
     );
