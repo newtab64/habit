@@ -316,7 +316,6 @@ impl HabitRowWidget {
     /// * `today` - The reference calendar date.
     /// * `on_toggle` - Callback invoked when a day symbol is clicked / logged: `(habit_id, date, Option<value>)`.
     /// * `on_select` - Callback invoked when the habit title or row is selected: `(habit_id)`.
-    #[allow(deprecated)]
     pub fn new<F1, F2>(
         habit: &Habit,
         score: f64,

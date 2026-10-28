@@ -218,13 +218,8 @@ pub fn build_heatmap_section() -> (
     )
 }
 
-/// Builds the habit details page and embeds the history editor overlay.
 #[cfg(feature = "ui")]
-#[allow(clippy::too_many_lines)]
-#[must_use]
-pub fn build_details() -> DetailsWidgets {
-    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
+fn build_details_header() -> (libadwaita::HeaderBar, gtk4::Button, gtk4::Button) {
     let content_header = libadwaita::HeaderBar::new();
     let content_title = libadwaita::WindowTitle::new("Habit Details", "");
     content_header.set_title_widget(Some(&content_title));
@@ -240,14 +235,11 @@ pub fn build_details() -> DetailsWidgets {
     delete_btn.add_css_class("destructive-action");
     content_header.pack_end(&delete_btn);
 
-    content_box.append(&content_header);
+    (content_header, edit_btn, delete_btn)
+}
 
-    let details_vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
-    details_vbox.set_margin_start(18);
-    details_vbox.set_margin_end(18);
-    details_vbox.set_margin_top(14);
-    details_vbox.set_margin_bottom(18);
-
+#[cfg(feature = "ui")]
+fn build_info_section() -> (gtk4::Box, gtk4::Label, gtk4::Label, gtk4::Label) {
     let info_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
     let title_label = gtk4::Label::new(None);
     title_label.add_css_class("title-1");
@@ -264,6 +256,38 @@ pub fn build_details() -> DetailsWidgets {
     target_label.set_halign(gtk4::Align::Start);
     info_box.append(&target_label);
 
+    (info_box, title_label, schedule_label, target_label)
+}
+
+#[cfg(feature = "ui")]
+fn build_curve_section() -> (gtk4::Label, gtk4::DrawingArea) {
+    let curve_header = gtk4::Label::new(Some("Score History (Last 30 Days)"));
+    curve_header.add_css_class("heading");
+    curve_header.set_halign(gtk4::Align::Start);
+
+    let curve_drawing_area = gtk4::DrawingArea::new();
+    curve_drawing_area.set_content_height(140);
+    curve_drawing_area.set_hexpand(true);
+
+    (curve_header, curve_drawing_area)
+}
+
+/// Builds the habit details page and embeds the history editor overlay.
+#[cfg(feature = "ui")]
+#[must_use]
+pub fn build_details() -> DetailsWidgets {
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+
+    let (content_header, edit_btn, delete_btn) = build_details_header();
+    content_box.append(&content_header);
+
+    let details_vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
+    details_vbox.set_margin_start(18);
+    details_vbox.set_margin_end(18);
+    details_vbox.set_margin_top(14);
+    details_vbox.set_margin_bottom(18);
+
+    let (info_box, title_label, schedule_label, target_label) = build_info_section();
     details_vbox.append(&info_box);
 
     let sep2 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
@@ -282,14 +306,8 @@ pub fn build_details() -> DetailsWidgets {
     let sep3 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     details_vbox.append(&sep3);
 
-    let curve_header = gtk4::Label::new(Some("Score History (Last 30 Days)"));
-    curve_header.add_css_class("heading");
-    curve_header.set_halign(gtk4::Align::Start);
+    let (curve_header, curve_drawing_area) = build_curve_section();
     details_vbox.append(&curve_header);
-
-    let curve_drawing_area = gtk4::DrawingArea::new();
-    curve_drawing_area.set_content_height(140);
-    curve_drawing_area.set_hexpand(true);
     details_vbox.append(&curve_drawing_area);
 
     let sep4 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
@@ -343,15 +361,11 @@ pub fn build_details() -> DetailsWidgets {
     }
 }
 
-/// Connects event handlers and dialog actions for the details view.
 #[cfg(feature = "ui")]
-#[allow(clippy::too_many_lines)]
-pub fn connect_detail_actions(
+fn connect_heatmap_navigation(
+    details: &DetailsWidgets,
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
-    root_window: &gtk4::Window,
-    root_overlay: &gtk4::Overlay,
-    details: &DetailsWidgets,
 ) {
     let inner_prev = Rc::clone(inner_rc);
     let caches_prev = caches.clone();
@@ -383,11 +397,15 @@ pub fn connect_detail_actions(
     details.edit_mode_btn.connect_clicked(move |_| {
         history_editor.open(&inner_edit_mode, &caches_edit_mode);
     });
+}
 
-    details
-        .history_editor
-        .connect_controllers(inner_rc, caches, root_window);
-
+#[cfg(feature = "ui")]
+fn connect_edit_action(
+    details: &DetailsWidgets,
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    root_overlay: &gtk4::Overlay,
+) {
     let inner_edit = Rc::clone(inner_rc);
     let caches_edit = caches.clone();
     let overlay_edit = root_overlay.clone();
@@ -417,7 +435,15 @@ pub fn connect_detail_actions(
             });
         }
     });
+}
 
+#[cfg(feature = "ui")]
+fn connect_delete_action(
+    details: &DetailsWidgets,
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    root_window: &gtk4::Window,
+) {
     let inner_delete = Rc::clone(inner_rc);
     let caches_delete = caches.clone();
     let win_delete = root_window.clone();
@@ -427,10 +453,16 @@ pub fn connect_detail_actions(
             (inner.selected_habit_id, Rc::clone(&inner.db))
         };
         if let Some(id) = selected_id {
-            let habit_name = db.get_habit(id).ok().flatten().map_or_else(|| "this habit".to_string(), |h| h.name);
+            let habit_name = db
+                .get_habit(id)
+                .ok()
+                .flatten()
+                .map_or_else(|| "this habit".to_string(), |h| h.name);
             let alert = libadwaita::AlertDialog::new(
                 Some(&format!("Delete \"{habit_name}\"?")),
-                Some("All completion history and progress data for this habit will be permanently deleted. This action cannot be undone."),
+                Some(
+                    "All completion history and progress data for this habit will be permanently deleted. This action cannot be undone.",
+                ),
             );
             alert.add_response("cancel", "Cancel");
             alert.add_response("delete", "Delete");
@@ -461,6 +493,23 @@ pub fn connect_detail_actions(
             });
         }
     });
+}
+
+/// Connects event handlers and dialog actions for the details view.
+#[cfg(feature = "ui")]
+pub fn connect_detail_actions(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    root_window: &gtk4::Window,
+    root_overlay: &gtk4::Overlay,
+    details: &DetailsWidgets,
+) {
+    connect_heatmap_navigation(details, inner_rc, caches);
+    details
+        .history_editor
+        .connect_controllers(inner_rc, caches, root_window);
+    connect_edit_action(details, inner_rc, caches, root_overlay);
+    connect_delete_action(details, inner_rc, caches, root_window);
 }
 
 /// Connects render callbacks to the details view drawing areas (ring, curve, heatmap, and history editor).

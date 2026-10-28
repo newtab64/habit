@@ -308,31 +308,7 @@ fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, liba
 /// * `habit` - `None` when creating a new habit, or `Some(&habit)` when editing.
 /// * `on_save` - Callback invoked with the validated `Habit` when confirmed.
 #[cfg(feature = "ui")]
-#[allow(clippy::too_many_lines)]
-pub fn show_habit_dialog(
-    root_overlay: &gtk4::Overlay,
-    habit: Option<&Habit>,
-    on_save: impl Fn(Habit) + 'static,
-) {
-    let title = if habit.is_some() {
-        "Edit Habit"
-    } else {
-        "New Habit"
-    };
-
-    let dialog_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    dialog_container.add_css_class("editor-dimming-backdrop");
-
-    let dialog_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    dialog_dimming.set_vexpand(true);
-    dialog_dimming.set_hexpand(true);
-    dialog_container.append(&dialog_dimming);
-
-    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    sheet_box.set_valign(gtk4::Align::End);
-    sheet_box.set_hexpand(true);
-    sheet_box.add_css_class("editor-bottom-sheet");
-
+fn build_sheet_header(title: &str) -> (gtk4::CenterBox, gtk4::Button, gtk4::Button) {
     let sheet_header = gtk4::CenterBox::new();
     sheet_header.add_css_class("editor-sheet-header");
     sheet_header.set_margin_start(16);
@@ -350,50 +326,18 @@ pub fn show_habit_dialog(
     let save_btn = gtk4::Button::with_label("Save");
     save_btn.add_css_class("suggested-action");
     sheet_header.set_end_widget(Some(&save_btn));
-    sheet_box.append(&sheet_header);
 
-    let header_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    header_sep.set_margin_bottom(6);
-    sheet_box.append(&header_sep);
+    (sheet_header, cancel_btn, save_btn)
+}
 
-    let pref_page = libadwaita::PreferencesPage::new();
-
-    // Group 1: General
-    let (group_general, name_row, type_row, target_row, unit_row) = build_general_group(habit);
-    pref_page.add(&group_general);
-
-    // Group 2: Schedule & Rest Days
-    let initial_schedule = habit.map_or(SCHEDULE_ALL_DAYS, |h| h.scheduled_days);
-    let (group_schedule, switch_rows) = build_schedule_group(initial_schedule);
-    pref_page.add(&group_schedule);
-
-    // Group 3: Accent Color
-    let initial_color = habit.map_or(DEFAULT_ACCENT_COLOR, |h| h.accent_color.as_str());
-    let (group_color, hex_row) = build_color_group(initial_color);
-    pref_page.add(&group_color);
-
-    let toast_overlay = libadwaita::ToastOverlay::new();
-    toast_overlay.set_child(Some(&pref_page));
-
-    let scrolled = gtk4::ScrolledWindow::new();
-    scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
-    scrolled.set_vscrollbar_policy(gtk4::PolicyType::Automatic);
-    scrolled.set_max_content_height(480);
-    scrolled.set_propagate_natural_height(true);
-    scrolled.set_margin_bottom(12);
-    scrolled.set_child(Some(&toast_overlay));
-    sheet_box.append(&scrolled);
-
-    let sheet_revealer = gtk4::Revealer::new();
-    sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
-    sheet_revealer.set_transition_duration(180);
-    sheet_revealer.set_child(Some(&sheet_box));
-    sheet_revealer.set_valign(gtk4::Align::End);
-    sheet_revealer.set_hexpand(true);
-    sheet_revealer.set_reveal_child(false);
-
-    dialog_container.append(&sheet_revealer);
-
+#[cfg(feature = "ui")]
+fn setup_dialog_dismiss(
+    dialog_container: &gtk4::Box,
+    dialog_dimming: &gtk4::Box,
+    sheet_revealer: &gtk4::Revealer,
+    cancel_btn: &gtk4::Button,
+    root_overlay: &gtk4::Overlay,
+) -> impl Fn() + Clone + 'static {
     let closed = std::rc::Rc::new(std::cell::RefCell::new(false));
     let overlay_for_close = root_overlay.clone();
     let container_for_close = dialog_container.clone();
@@ -444,22 +388,42 @@ pub fn show_habit_dialog(
     });
     dialog_container.add_controller(key_controller);
 
-    let habit_orig = habit.cloned();
-    let close_save = close_dialog;
+    close_dialog
+}
+
+#[cfg(feature = "ui")]
+struct HabitFormRows {
+    name_row: libadwaita::EntryRow,
+    type_row: libadwaita::ComboRow,
+    target_row: libadwaita::SpinRow,
+    unit_row: libadwaita::EntryRow,
+    switch_rows: Vec<(u8, libadwaita::SwitchRow)>,
+    hex_row: libadwaita::EntryRow,
+}
+
+#[cfg(feature = "ui")]
+fn connect_save_button(
+    save_btn: &gtk4::Button,
+    form: HabitFormRows,
+    toast_overlay: libadwaita::ToastOverlay,
+    habit_orig: Option<Habit>,
+    close_save: impl Fn() + 'static,
+    on_save: impl Fn(Habit) + 'static,
+) {
     save_btn.connect_clicked(move |_| {
-        let name = name_row.text().to_string();
-        let is_meas = type_row.selected() == 1;
-        let target = target_row.value();
-        let unit = unit_row.text().to_string();
+        let name = form.name_row.text().to_string();
+        let is_meas = form.type_row.selected() == 1;
+        let target = form.target_row.value();
+        let unit = form.unit_row.text().to_string();
 
         let mut scheduled_days = 0u8;
-        for (bit, s) in &switch_rows {
+        for (bit, s) in &form.switch_rows {
             if s.is_active() {
                 scheduled_days |= *bit;
             }
         }
 
-        let hex_color = hex_row.text().to_string();
+        let hex_color = form.hex_row.text().to_string();
 
         match validate_habit_form(&name, is_meas, target, &unit, scheduled_days, &hex_color) {
             Ok(mut validated_habit) => {
@@ -478,6 +442,108 @@ pub fn show_habit_dialog(
             }
         }
     });
+}
+
+/// Displays an animated bottom sheet dialog for creating or editing a habit.
+///
+/// # Arguments
+/// * `root_overlay` - The root overlay of the application window where this panel docks.
+/// * `habit` - `None` when creating a new habit, or `Some(&habit)` when editing.
+/// * `on_save` - Callback invoked with the validated `Habit` when confirmed.
+#[cfg(feature = "ui")]
+pub fn show_habit_dialog(
+    root_overlay: &gtk4::Overlay,
+    habit: Option<&Habit>,
+    on_save: impl Fn(Habit) + 'static,
+) {
+    let title = if habit.is_some() {
+        "Edit Habit"
+    } else {
+        "New Habit"
+    };
+
+    let dialog_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    dialog_container.add_css_class("editor-dimming-backdrop");
+
+    let dialog_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    dialog_dimming.set_vexpand(true);
+    dialog_dimming.set_hexpand(true);
+    dialog_container.append(&dialog_dimming);
+
+    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    sheet_box.set_valign(gtk4::Align::End);
+    sheet_box.set_hexpand(true);
+    sheet_box.add_css_class("editor-bottom-sheet");
+
+    let (sheet_header, cancel_btn, save_btn) = build_sheet_header(title);
+    sheet_box.append(&sheet_header);
+
+    let header_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+    header_sep.set_margin_bottom(6);
+    sheet_box.append(&header_sep);
+
+    let pref_page = libadwaita::PreferencesPage::new();
+
+    // Group 1: General
+    let (group_general, name_row, type_row, target_row, unit_row) = build_general_group(habit);
+    pref_page.add(&group_general);
+
+    // Group 2: Schedule & Rest Days
+    let initial_schedule = habit.map_or(SCHEDULE_ALL_DAYS, |h| h.scheduled_days);
+    let (group_schedule, switch_rows) = build_schedule_group(initial_schedule);
+    pref_page.add(&group_schedule);
+
+    // Group 3: Accent Color
+    let initial_color = habit.map_or(DEFAULT_ACCENT_COLOR, |h| h.accent_color.as_str());
+    let (group_color, hex_row) = build_color_group(initial_color);
+    pref_page.add(&group_color);
+
+    let toast_overlay = libadwaita::ToastOverlay::new();
+    toast_overlay.set_child(Some(&pref_page));
+
+    let scrolled = gtk4::ScrolledWindow::new();
+    scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
+    scrolled.set_vscrollbar_policy(gtk4::PolicyType::Automatic);
+    scrolled.set_max_content_height(480);
+    scrolled.set_propagate_natural_height(true);
+    scrolled.set_margin_bottom(12);
+    scrolled.set_child(Some(&toast_overlay));
+    sheet_box.append(&scrolled);
+
+    let sheet_revealer = gtk4::Revealer::new();
+    sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
+    sheet_revealer.set_transition_duration(180);
+    sheet_revealer.set_child(Some(&sheet_box));
+    sheet_revealer.set_valign(gtk4::Align::End);
+    sheet_revealer.set_hexpand(true);
+    sheet_revealer.set_reveal_child(false);
+
+    dialog_container.append(&sheet_revealer);
+
+    let close_dialog = setup_dialog_dismiss(
+        &dialog_container,
+        &dialog_dimming,
+        &sheet_revealer,
+        &cancel_btn,
+        root_overlay,
+    );
+
+    let form = HabitFormRows {
+        name_row,
+        type_row,
+        target_row,
+        unit_row,
+        switch_rows,
+        hex_row,
+    };
+    connect_save_button(
+        &save_btn,
+        form,
+        toast_overlay,
+        habit.cloned(),
+        close_dialog,
+        on_save,
+    );
 
     root_overlay.add_overlay(&dialog_container);
     sheet_revealer.set_reveal_child(true);

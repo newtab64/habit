@@ -91,11 +91,31 @@ pub struct Database {
     conn: Mutex<Connection>,
 }
 
+fn temp_db_path(prefix: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "{prefix}_{}_{}.db",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos())
+    ))
+}
+
+fn remove_sqlite_files(path: &Path) {
+    let _ = std::fs::remove_file(path);
+    let mut wal_path = path.to_path_buf().into_os_string();
+    wal_path.push("-wal");
+    let _ = std::fs::remove_file(wal_path);
+    let mut shm_path = path.to_path_buf().into_os_string();
+    shm_path.push("-shm");
+    let _ = std::fs::remove_file(shm_path);
+}
+
 struct TempFileGuard(std::path::PathBuf);
 
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        remove_sqlite_files(&self.0);
     }
 }
 
@@ -374,15 +394,8 @@ impl Database {
     /// # Errors
     /// Returns [`DbError`] if opening target or running backup fails.
     pub fn export_backup(&self, target_path: &Path) -> Result<(), DbError> {
-        let temp_dir = std::env::temp_dir();
-        let temp_export = temp_dir.join(format!(
-            "habit_export_{}_{}.db",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_nanos())
-        ));
-        let _ = std::fs::remove_file(&temp_export);
+        let temp_export = temp_db_path("habit_export");
+        remove_sqlite_files(&temp_export);
 
         let _guard = TempFileGuard(temp_export.clone());
 
@@ -397,15 +410,7 @@ impl Database {
             let _ = dst_conn.execute_batch("PRAGMA vacuum;");
         }
 
-        if target_path.exists() {
-            let _ = std::fs::remove_file(target_path);
-            let mut wal_path = target_path.to_path_buf().into_os_string();
-            wal_path.push("-wal");
-            let _ = std::fs::remove_file(wal_path);
-            let mut shm_path = target_path.to_path_buf().into_os_string();
-            shm_path.push("-shm");
-            let _ = std::fs::remove_file(shm_path);
-        }
+        remove_sqlite_files(target_path);
 
         std::fs::copy(&temp_export, target_path)?;
         Ok(())
@@ -428,15 +433,8 @@ impl Database {
         // Copy source to a temporary file on the local tempfs before opening.
         // Flatpak portal file paths (/run/user/.../doc/...) reside on FUSE which does
         // not support SQLite fcntl file locking, causing "disk I/O error".
-        let temp_dir = std::env::temp_dir();
-        let temp_backup = temp_dir.join(format!(
-            "habit_restore_{}_{}.db",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_nanos())
-        ));
-        let _ = std::fs::remove_file(&temp_backup);
+        let temp_backup = temp_db_path("habit_restore");
+        remove_sqlite_files(&temp_backup);
         std::fs::copy(source_path, &temp_backup)?;
 
         let _guard = TempFileGuard(temp_backup.clone());

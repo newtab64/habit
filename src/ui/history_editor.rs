@@ -203,7 +203,6 @@ impl HistoryEditorWidgets {
 
     /// Connects user interaction controllers: close button, dimming tap, scroll gesture,
     /// heatmap date hit testing, and the Escape key on the root window.
-    #[allow(clippy::too_many_lines)]
     pub fn connect_controllers(
         &self,
         inner_rc: &Rc<RefCell<WindowInner>>,
@@ -274,63 +273,14 @@ impl HistoryEditorWidgets {
             let offset = *offset_click.borrow();
             if let Some(clicked_date) = loop_heatmap_hit_test(x, y, width, height, today, offset) {
                 if clicked_date <= today {
-                    let is_scheduled = habit.is_scheduled_on(clicked_date.weekday());
-                    let cur_status = entries_click.borrow().get(&clicked_date).copied();
-                    let target_val = habit.habit_type.target().unwrap_or(1.0);
-
-                    let (new_status, new_val, delete_db) = if is_scheduled {
-                        match cur_status {
-                            None | Some(EntryStatus::Missed) => {
-                                (Some(EntryStatus::Completed), target_val, false)
-                            }
-                            Some(EntryStatus::Completed) => {
-                                (Some(EntryStatus::Skipped), 0.0, false)
-                            }
-                            Some(EntryStatus::Skipped) => (None, 0.0, true),
-                        }
-                    } else {
-                        match cur_status {
-                            Some(EntryStatus::Skipped) | None => {
-                                (Some(EntryStatus::Completed), target_val, false)
-                            }
-                            Some(EntryStatus::Completed) => (Some(EntryStatus::Missed), 0.0, false),
-                            Some(EntryStatus::Missed) => (Some(EntryStatus::Skipped), 0.0, true),
-                        }
-                    };
-
-                    let write_res = {
-                        let inner = inner_click.borrow();
-                        let db = &inner.db;
-                        if delete_db {
-                            db.delete_entry(habit_id, clicked_date)
-                        } else if let Some(status) = new_status {
-                            db.log_entry(habit_id, clicked_date, status, new_val)
-                        } else {
-                            Ok(())
-                        }
-                    };
-
-                    match write_res {
-                        Ok(()) => {
-                            if let Some(status) = new_status {
-                                entries_click.borrow_mut().insert(clicked_date, status);
-                            } else {
-                                entries_click.borrow_mut().remove(&clicked_date);
-                            }
-
-                            area_click.queue_draw();
-                            refresh(&inner_click, &caches_click);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to update habit entry: {e}");
-                            let inner = inner_click.borrow();
-                            inner
-                                .toast_overlay
-                                .add_toast(libadwaita::Toast::new(&format!(
-                                    "Failed to save history: {e}"
-                                )));
-                        }
-                    }
+                    handle_history_click(
+                        &habit,
+                        clicked_date,
+                        &entries_click,
+                        &area_click,
+                        &inner_click,
+                        &caches_click,
+                    );
                 }
             }
         });
@@ -350,5 +300,68 @@ impl HistoryEditorWidgets {
             }
         });
         root_window.add_controller(key_controller);
+    }
+}
+
+#[cfg(feature = "ui")]
+fn handle_history_click(
+    habit: &crate::engine::models::Habit,
+    clicked_date: chrono::NaiveDate,
+    entries_click: &RefCell<HashMap<chrono::NaiveDate, EntryStatus>>,
+    area_click: &gtk4::DrawingArea,
+    inner_click: &Rc<RefCell<WindowInner>>,
+    caches_click: &DrawCaches,
+) {
+    let Some(habit_id) = habit.id else { return };
+    let is_scheduled = habit.is_scheduled_on(clicked_date.weekday());
+    let cur_status = entries_click.borrow().get(&clicked_date).copied();
+    let target_val = habit.habit_type.target().unwrap_or(1.0);
+
+    let (new_status, new_val, delete_db) = if is_scheduled {
+        match cur_status {
+            None | Some(EntryStatus::Missed) => (Some(EntryStatus::Completed), target_val, false),
+            Some(EntryStatus::Completed) => (Some(EntryStatus::Skipped), 0.0, false),
+            Some(EntryStatus::Skipped) => (None, 0.0, true),
+        }
+    } else {
+        match cur_status {
+            Some(EntryStatus::Skipped) | None => (Some(EntryStatus::Completed), target_val, false),
+            Some(EntryStatus::Completed) => (Some(EntryStatus::Missed), 0.0, false),
+            Some(EntryStatus::Missed) => (Some(EntryStatus::Skipped), 0.0, true),
+        }
+    };
+
+    let write_res = {
+        let inner = inner_click.borrow();
+        let db = &inner.db;
+        if delete_db {
+            db.delete_entry(habit_id, clicked_date)
+        } else if let Some(status) = new_status {
+            db.log_entry(habit_id, clicked_date, status, new_val)
+        } else {
+            Ok(())
+        }
+    };
+
+    match write_res {
+        Ok(()) => {
+            if let Some(status) = new_status {
+                entries_click.borrow_mut().insert(clicked_date, status);
+            } else {
+                entries_click.borrow_mut().remove(&clicked_date);
+            }
+
+            area_click.queue_draw();
+            refresh(inner_click, caches_click);
+        }
+        Err(e) => {
+            eprintln!("Failed to update habit entry: {e}");
+            let inner = inner_click.borrow();
+            inner
+                .toast_overlay
+                .add_toast(libadwaita::Toast::new(&format!(
+                    "Failed to save history: {e}"
+                )));
+        }
     }
 }
