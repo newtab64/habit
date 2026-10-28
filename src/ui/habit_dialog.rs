@@ -178,13 +178,20 @@ fn build_schedule_group(
     let presets_row = libadwaita::ActionRow::new();
     presets_row.set_title("Quick Presets");
 
-    let presets_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let presets_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 2);
+    presets_box.set_valign(gtk4::Align::Center);
     let all_days_btn = gtk4::Button::with_label("All Days");
     all_days_btn.add_css_class("flat");
+    all_days_btn.add_css_class("caption");
+    all_days_btn.add_css_class("quick-preset-btn");
     let weekdays_btn = gtk4::Button::with_label("Weekdays");
     weekdays_btn.add_css_class("flat");
+    weekdays_btn.add_css_class("caption");
+    weekdays_btn.add_css_class("quick-preset-btn");
     let weekends_btn = gtk4::Button::with_label("Weekends");
     weekends_btn.add_css_class("flat");
+    weekends_btn.add_css_class("caption");
+    weekends_btn.add_css_class("quick-preset-btn");
 
     presets_box.append(&all_days_btn);
     presets_box.append(&weekdays_btn);
