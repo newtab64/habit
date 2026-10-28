@@ -174,7 +174,12 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
              box-shadow: none;\n  \
              min-width: 42px;\n  \
              min-height: 46px;\n  \
-             padding: 0;\n\
+             padding: 0;\n  \
+             margin: 0;\n\
+         }}\n\
+         .habit-row-{habit_id} button.day-symbol-button label {{\n  \
+             padding: 0;\n  \
+             line-height: 1;\n\
          }}\n\
          .loop-popup-accent-{habit_id} {{\n  \
              color: {color};\n\
@@ -223,6 +228,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     let progress_ring = gtk4::DrawingArea::new();
     progress_ring.set_content_width(20);
     progress_ring.set_content_height(20);
+    progress_ring.set_size_request(20, 20);
     progress_ring.set_halign(gtk4::Align::Center);
     progress_ring.set_valign(gtk4::Align::Center);
     let pct = (clamped * 100.0).round();
@@ -240,7 +246,11 @@ fn create_left_pane<F: Fn(i64) + 'static>(
 
     let title_label = gtk4::Label::new(None);
     title_label.set_markup(&format!("<b>{}</b>", gtk4::glib::markup_escape_text(name)));
-    title_label.set_halign(gtk4::Align::Start);
+    title_label.set_single_line_mode(true);
+    title_label.set_hexpand(true);
+    title_label.set_xalign(0.0);
+    title_label.set_yalign(0.5);
+    title_label.set_halign(gtk4::Align::Fill);
     title_label.set_valign(gtk4::Align::Center);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");
@@ -336,6 +346,7 @@ impl HabitRowWidget {
 
         // Main horizontal container with clean compact gap between habit info and tickboxes
         let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        container.set_valign(gtk4::Align::Center);
         container.add_css_class("habit-row");
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);
@@ -361,15 +372,24 @@ impl HabitRowWidget {
             day_btn.add_css_class("flat");
             day_btn.add_css_class("day-symbol-button");
             day_btn.set_size_request(42, 46);
+            day_btn.set_valign(gtk4::Align::Center);
 
             let day_label = gtk4::Label::new(Some(&display.text));
+            day_label.set_single_line_mode(true);
             day_label.add_css_class("day-symbol");
             day_label.add_css_class(display.css_class);
             if !display.is_accent {
                 day_label.add_css_class("dim-label");
             }
-            day_label.set_halign(gtk4::Align::Center);
-            day_label.set_valign(gtk4::Align::Center);
+            day_label.set_xalign(0.5);
+            day_label.set_yalign(0.5);
+            day_label.set_halign(gtk4::Align::Fill);
+            day_label.set_valign(gtk4::Align::Fill);
+            if display.css_class == "symbol-rest" {
+                // Compensate for Cantarell Bold em-dash ("—") glyph sitting +1.5px below
+                // the cap-height / progress-ring optical center.
+                day_label.set_margin_bottom(3);
+            }
             day_btn.set_child(Some(&day_label));
 
             if is_measurable {

@@ -172,8 +172,8 @@ fn update_header_dates(labels: &[gtk4::Label], today: NaiveDate) {
 
 fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id: Option<i64>) {
     let mut full_css = String::from(
-        ".habit-title {\n  font-weight: 700;\n}\n\
-         .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n}\n\
+        ".habit-title {\n  font-weight: 700;\n  padding: 0;\n  line-height: 1;\n}\n\
+         .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n  padding: 0;\n  line-height: 1;\n}\n\
          .drop-target-hover {\n  background-color: rgba(53, 132, 228, 0.16);\n  border-radius: 8px;\n}\n\
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\

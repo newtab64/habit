@@ -40,15 +40,15 @@ pub fn build_sidebar() -> SidebarWidgets {
     lock_btn.add_css_class("flat");
     sidebar_header.pack_start(&lock_btn);
 
-    let add_btn = gtk4::Button::from_icon_name("list-add-symbolic");
-    add_btn.set_tooltip_text(Some("New Habit"));
-    add_btn.add_css_class("flat");
-    sidebar_header.pack_end(&add_btn);
-
     let menu_btn = gtk4::MenuButton::new();
     menu_btn.set_icon_name("open-menu-symbolic");
     menu_btn.add_css_class("flat");
     sidebar_header.pack_end(&menu_btn);
+
+    let add_btn = gtk4::Button::from_icon_name("list-add-symbolic");
+    add_btn.set_tooltip_text(Some("New Habit"));
+    add_btn.add_css_class("flat");
+    sidebar_header.pack_end(&add_btn);
 
     sidebar_box.append(&sidebar_header);
 
