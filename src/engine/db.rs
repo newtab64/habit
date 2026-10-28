@@ -162,7 +162,8 @@ impl Database {
                 accent_color TEXT NOT NULL DEFAULT '#3584E4',
                 scheduled_days INTEGER NOT NULL DEFAULT 127,
                 archived INTEGER NOT NULL DEFAULT 0,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS habit_entries (
@@ -198,8 +199,8 @@ impl Database {
 
         let conn = self.lock_conn()?;
         conn.execute(
-            "INSERT INTO habits (name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
+            "INSERT INTO habits (name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at, sort_order)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE((SELECT MAX(sort_order) + 1 FROM habits), 0));",
             rusqlite::params![
                 habit.name,
                 habit_type_str,
@@ -215,7 +216,7 @@ impl Database {
         Ok(conn.last_insert_rowid())
     }
 
-    /// Retrieves all habits in the database, ordered by ID ascending.
+    /// Retrieves all habits in the database, ordered by `sort_order` ascending then `id` ascending.
     ///
     /// # Errors
     /// Returns [`DbError`] if querying or row deserialization fails.
@@ -223,7 +224,7 @@ impl Database {
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
-             FROM habits ORDER BY id ASC;",
+             FROM habits ORDER BY sort_order ASC, id ASC;",
         )?;
         let mut rows = stmt.query([])?;
         let mut habits = Vec::new();
@@ -231,6 +232,24 @@ impl Database {
             habits.push(Self::row_to_habit(row)?);
         }
         Ok(habits)
+    }
+
+    /// Updates the display order of habits in a single atomic transaction.
+    ///
+    /// # Errors
+    /// Returns [`DbError`] if updating any habit's `sort_order` fails.
+    pub fn reorder_habits(&self, ordered_ids: &[i64]) -> Result<(), DbError> {
+        let mut conn = self.lock_conn()?;
+        let tx = conn.transaction()?;
+        for (idx, &habit_id) in ordered_ids.iter().enumerate() {
+            let sort_order = i64::try_from(idx).unwrap_or(0);
+            tx.execute(
+                "UPDATE habits SET sort_order = ?1 WHERE id = ?2;",
+                rusqlite::params![sort_order, habit_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Retrieves a single habit by its primary key ID.
@@ -456,6 +475,18 @@ impl Database {
         if table_count < 2 {
             return Err(DbError::InvalidBackupSchema(
                 "Backup database is missing required tables ('habits', 'habit_entries')"
+                    .to_string(),
+            ));
+        }
+
+        let has_sort_order: i64 = src_conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('habits') WHERE name = 'sort_order';",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_sort_order == 0 {
+            return Err(DbError::InvalidBackupSchema(
+                "Backup database uses an unsupported older schema (missing 'sort_order' column)"
                     .to_string(),
             ));
         }

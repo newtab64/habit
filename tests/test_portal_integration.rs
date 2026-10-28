@@ -170,3 +170,40 @@ fn test_database_shared_restore_without_refcell() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_restore_rejects_old_schema_without_sort_order() {
+    let temp_dir = std::env::temp_dir();
+    let old_db_path = temp_dir.join(format!("habit_old_schema_{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&old_db_path);
+
+    {
+        let conn = rusqlite::Connection::open(&old_db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE habits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                habit_type TEXT NOT NULL,
+                target_value REAL NOT NULL DEFAULT 1.0,
+                unit TEXT,
+                accent_color TEXT NOT NULL DEFAULT '#3584E4',
+                scheduled_days INTEGER NOT NULL DEFAULT 127,
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE habit_entries (
+                habit_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                entry_status TEXT NOT NULL,
+                value REAL NOT NULL DEFAULT 0.0,
+                PRIMARY KEY (habit_id, date)
+            );",
+        )
+        .unwrap();
+    }
+
+    let db = Database::open_in_memory().unwrap();
+    let res = db.restore_backup(&old_db_path);
+    let _ = std::fs::remove_file(&old_db_path);
+    assert!(matches!(res, Err(DbError::InvalidBackupSchema(_))));
+}

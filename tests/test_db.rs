@@ -291,3 +291,28 @@ fn test_error_handling() {
         other => panic!("expected DbError::HabitNotFound(404), got {other:?}"),
     }
 }
+
+#[test]
+fn test_reorder_habits_and_sort_order() {
+    let db = Database::open_in_memory().expect("in-memory db");
+    let h1 = db.create_habit(&Habit::new_binary("First")).unwrap();
+    let h2 = db.create_habit(&Habit::new_binary("Second")).unwrap();
+    let h3 = db.create_habit(&Habit::new_binary("Third")).unwrap();
+
+    let initial: Vec<i64> = db
+        .get_habits()
+        .unwrap()
+        .into_iter()
+        .filter_map(|h| h.id)
+        .collect();
+    assert_eq!(initial, vec![h1, h2, h3]);
+
+    db.reorder_habits(&[h3, h1, h2]).unwrap();
+    let reordered: Vec<i64> = db
+        .get_habits()
+        .unwrap()
+        .into_iter()
+        .filter_map(|h| h.id)
+        .collect();
+    assert_eq!(reordered, vec![h3, h1, h2]);
+}
