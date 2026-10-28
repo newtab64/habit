@@ -8,18 +8,20 @@ Users want to place priority habits at the top of the list without cluttering da
 
 ## Goals, Non-Goals, and Anti-Goals
 - **Goals:**
-  - Persist custom habit ordering in SQLite (`sort_order` column on `habits`) with automatic idempotent migration for existing `.db` files and restored backups.
+  - Persist custom habit ordering in SQLite (`sort_order INTEGER NOT NULL DEFAULT 0` column on `habits`) and strictly require the new schema when importing backups (rejecting older database versions missing `sort_order`).
   - Add a top-left lock button (`changes-prevent-symbolic` / `changes-allow-symbolic`) to `sidebar_header`.
   - When unlocked (Drag Mode), display a drag handle (`list-drag-handle-symbolic`) on each habit row, disable the 5 day tickboxes and Details navigation, and allow dragging habits up and down via GTK4 `DragSource` + `DropTarget`.
   - When clicking the lock button again to finish reordering, present an `adw::AlertDialog` ("Save Habit Order?") to **Save** (persist `sort_order` in a single transaction) or **Discard** (revert to saved order) before locking back.
 - **Non-Goals:**
+  - Backward-compatible schema migration for older database versions.
   - Multi-select dragging or keyboard-shortcut reordering.
 - **Anti-Goals:**
+  - Allowing imports of databases that do not match the new schema format.
   - Allowing accidental day-entry toggles or Details page navigation while in Drag Mode.
 
 ## Constraints
 - Single-threaded GTK4/libadwaita architecture; no new dependencies.
-- Backward-compatible SQLite migration so existing user databases and imported backups without `sort_order` automatically upgrade on open/restore.
+- Strict schema validation in `restore_backup`: reject any backup `.db` whose `habits` table does not include `sort_order`.
 - Zero warnings under `cargo clippy --features ui --all-targets -- -D warnings`.
 
 ## Approaches Considered
@@ -31,7 +33,7 @@ Users want to place priority habits at the top of the list without cluttering da
    - Rejected due to jumpiness across multiple rows and manual coordinate recalculation during scrolling.
 
 ## Decisions Made
-- **Database:** `habits` table adds `sort_order INTEGER NOT NULL DEFAULT 0` (applied via `CREATE TABLE` and idempotent `ALTER TABLE` migration in `init_tables` and `restore_backup`). `get_habits()` orders by `sort_order ASC, id ASC`. `Database::reorder_habits(&self, ordered_ids: &[i64]) -> Result<(), DbError>` updates `sort_order` in a single transaction.
+- **Database:** `habits` table defines `sort_order INTEGER NOT NULL DEFAULT 0`. `restore_backup` verifies via `pragma_table_info('habits')` that `sort_order` exists and returns `DbError::InvalidBackupSchema` if missing (only the new database format is supported). `get_habits()` orders by `sort_order ASC, id ASC`. `Database::reorder_habits(&self, ordered_ids: &[i64]) -> Result<(), DbError>` updates `sort_order` in a single transaction.
 - **Header UI:** `SidebarWidgets` adds `lock_btn: gtk4::Button` packed at the start of `sidebar_header` (`changes-prevent-symbolic` when locked, `changes-allow-symbolic` when unlocked).
 - **Drag Mode State:** `WindowInner` tracks `reorder_mode: bool` and `staged_habit_order: Vec<i64>` (held in `DrawCaches` or `WindowInner`). In Drag Mode, `add_btn` is disabled, each `HabitRowWidget` shows a leading `list-drag-handle-symbolic` icon, disables `days_box` (`set_sensitive(false)`), skips attaching the Details click gesture, and attaches `DragSource` + `DropTarget`.
 - **Confirmation Dialog:** Clicking `lock_btn` while in Drag Mode opens `adw::AlertDialog` ("Save Habit Order?", responses `"discard"` / `"save"`). Choosing `"save"` calls `db.reorder_habits(&staged_order)` and exits Drag Mode; choosing `"discard"` clears `staged_order` and exits Drag Mode.
