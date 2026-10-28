@@ -389,6 +389,13 @@ pub fn run_app() {
         .build();
 
     app.connect_activate(|app| {
+        if let Some(window) = app
+            .active_window()
+            .or_else(|| app.windows().into_iter().next())
+        {
+            window.present();
+            return;
+        }
         let window = HabitWindow::open_default(app);
         window.present();
     });
