@@ -38,6 +38,18 @@ fn connect_lock_button(
     lock_btn.connect_clicked(move |_| {
         let is_reorder = *caches_lock.reorder_mode.borrow();
         if is_reorder {
+            let unchanged = crate::ui::habit_row::is_habit_order_unchanged(
+                &caches_lock.initial_habit_order.borrow(),
+                &caches_lock.staged_habit_order.borrow(),
+            );
+            if unchanged {
+                *caches_lock.reorder_mode.borrow_mut() = false;
+                caches_lock.initial_habit_order.borrow_mut().clear();
+                caches_lock.staged_habit_order.borrow_mut().clear();
+                refresh(&inner_lock, &caches_lock);
+                return;
+            }
+
             let alert = libadwaita::AlertDialog::new(
                 Some("Save Habit Order?"),
                 Some("Do you want to save the new habit order or discard your changes?"),
@@ -67,10 +79,12 @@ fn connect_lock_button(
                             )));
                     }
                     *caches_cb.reorder_mode.borrow_mut() = false;
+                    caches_cb.initial_habit_order.borrow_mut().clear();
                     caches_cb.staged_habit_order.borrow_mut().clear();
                     refresh(&inner_cb, &caches_cb);
                 } else if response == "discard" {
                     *caches_cb.reorder_mode.borrow_mut() = false;
+                    caches_cb.initial_habit_order.borrow_mut().clear();
                     caches_cb.staged_habit_order.borrow_mut().clear();
                     refresh(&inner_cb, &caches_cb);
                 }
@@ -86,6 +100,10 @@ fn connect_lock_button(
                     .filter_map(|h| h.id)
                     .collect()
             };
+            caches_lock
+                .initial_habit_order
+                .borrow_mut()
+                .clone_from(&ids);
             *caches_lock.staged_habit_order.borrow_mut() = ids;
             *caches_lock.reorder_mode.borrow_mut() = true;
             refresh(&inner_lock, &caches_lock);

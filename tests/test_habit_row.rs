@@ -435,3 +435,52 @@ fn test_move_habit_in_order() {
     ));
     assert_eq!(order, vec![40, 20, 30, 10]);
 }
+
+#[test]
+fn test_target_index_for_drag_y_midpoint_crossing() {
+    // 4 rows of height 46px with 6px spacing: (top, height)
+    let spans = vec![
+        (0.0, 46.0),   // idx 0: midpoint 23.0
+        (52.0, 46.0),  // idx 1: midpoint 75.0
+        (104.0, 46.0), // idx 2: midpoint 127.0
+        (156.0, 46.0), // idx 3: midpoint 179.0
+    ];
+
+    // Dragging row 1 downward: before row 2 midpoint (127.0) stays at 1; past 127.0 moves to 2
+    assert_eq!(
+        habit::ui::habit_row::target_index_for_drag_y(&spans, 1, 120.0),
+        1
+    );
+    assert_eq!(
+        habit::ui::habit_row::target_index_for_drag_y(&spans, 1, 130.0),
+        2
+    );
+
+    // Dragging row 2 upward: above row 1 midpoint (75.0) moves to 1; above row 0 midpoint (23.0) moves to 0
+    assert_eq!(
+        habit::ui::habit_row::target_index_for_drag_y(&spans, 2, 70.0),
+        1
+    );
+    assert_eq!(
+        habit::ui::habit_row::target_index_for_drag_y(&spans, 2, -15.0),
+        0
+    );
+
+    // Dragging past bottom edge clamps to last index (3)
+    assert_eq!(
+        habit::ui::habit_row::target_index_for_drag_y(&spans, 0, 500.0),
+        3
+    );
+}
+
+#[test]
+fn test_is_habit_order_unchanged() {
+    assert!(habit::ui::habit_row::is_habit_order_unchanged(
+        &[1, 2, 3],
+        &[1, 2, 3]
+    ));
+    assert!(!habit::ui::habit_row::is_habit_order_unchanged(
+        &[1, 2, 3],
+        &[2, 1, 3]
+    ));
+}

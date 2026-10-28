@@ -438,49 +438,133 @@ impl HabitRowWidget {
         &self.container
     }
 
-    /// Configures this row for drag-and-drop reordering: prepends a drag handle icon,
-    /// disables the 5 day tickboxes, and attaches `DragSource` and `DropTarget` controllers.
-    pub fn enable_reorder_drag<F>(&self, habit_id: i64, on_drop: F)
-    where
-        F: Fn(i64, i64) + 'static,
-    {
+    /// Configures this row for live pointer-tracked drag reordering: prepends a drag handle icon,
+    /// disables the 5 day tickboxes, and attaches a `gtk4::GestureDrag` controller that reorders
+    /// sibling rows in-place as the pointer crosses neighboring row midpoints.
+    pub fn enable_reorder_drag(
+        &self,
+        habit_id: i64,
+        list_box: &gtk4::Box,
+        staged_order: &std::rc::Rc<std::cell::RefCell<Vec<i64>>>,
+    ) {
         let drag_icon = gtk4::Image::from_icon_name("list-drag-handle-symbolic");
         drag_icon.add_css_class("drag-handle");
         drag_icon.add_css_class("dim-label");
         drag_icon.set_valign(gtk4::Align::Center);
         self.left_box.prepend(&drag_icon);
+        self.container.set_cursor_from_name(Some("grab"));
 
         self.days_box.set_sensitive(false);
 
-        let drag_source = gtk4::DragSource::new();
-        drag_source.set_actions(gtk4::gdk::DragAction::MOVE);
-        drag_source.connect_prepare(move |_src, _x, _y| {
-            Some(gtk4::gdk::ContentProvider::for_value(&habit_id.to_value()))
-        });
-        self.container.add_controller(drag_source);
+        let drag = gtk4::GestureDrag::new();
+        let grab_offset_y = std::rc::Rc::new(std::cell::Cell::new(0.0_f64));
 
-        let drop_target = gtk4::DropTarget::new(i64::static_type(), gtk4::gdk::DragAction::MOVE);
-        let row_enter = self.container.clone();
-        drop_target.connect_enter(move |_, _, _| {
-            row_enter.add_css_class("drop-target-hover");
-            gtk4::gdk::DragAction::MOVE
+        let row_begin = self.container.clone();
+        let grab_y_begin = std::rc::Rc::clone(&grab_offset_y);
+        drag.connect_drag_begin(move |gesture, _x, y| {
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            grab_y_begin.set(y);
+            row_begin.add_css_class("dragging-row");
+            row_begin.set_cursor_from_name(Some("grabbing"));
         });
 
-        let row_leave = self.container.clone();
-        drop_target.connect_leave(move |_| {
-            row_leave.remove_css_class("drop-target-hover");
+        let row_update = self.container.clone();
+        let list_update = list_box.clone();
+        let staged_update = std::rc::Rc::clone(staged_order);
+        let grab_y_update = std::rc::Rc::clone(&grab_offset_y);
+        drag.connect_drag_update(move |_, _offset_x, offset_y| {
+            let Some(row_bounds) = row_update.compute_bounds(&list_update) else {
+                return;
+            };
+            // In GTK4, GestureDrag's offset_y is relative to row_update's own coordinate system.
+            // Because row_update itself moves inside list_update whenever we swap rows, the
+            // pointer's true Y position inside list_update is row_bounds.y() + grab_y + offset_y.
+            let pointer_y = f64::from(row_bounds.y()) + grab_y_update.get() + offset_y;
+
+            let mut spans = Vec::new();
+            let mut children = Vec::new();
+            let mut child_opt = list_update.first_child();
+            while let Some(child) = child_opt {
+                if let Some(bounds) = child.compute_bounds(&list_update) {
+                    spans.push((f64::from(bounds.y()), f64::from(bounds.height())));
+                } else {
+                    spans.push((0.0, 46.0));
+                }
+                child_opt = child.next_sibling();
+                children.push(child);
+            }
+
+            let target_change = {
+                let mut order = staged_update.borrow_mut();
+                let Some(current_idx) = order.iter().position(|&id| id == habit_id) else {
+                    return;
+                };
+                let target_idx = target_index_for_drag_y(&spans, current_idx, pointer_y);
+                if target_idx == current_idx || target_idx >= order.len() {
+                    None
+                } else {
+                    let target_id = order[target_idx];
+                    move_habit_in_order(&mut order, habit_id, target_id);
+                    Some((current_idx, target_idx))
+                }
+            };
+
+            if let Some((from_idx, to_idx)) = target_change {
+                if from_idx < children.len() {
+                    let removed = children.remove(from_idx);
+                    children.insert(to_idx.min(children.len()), removed);
+                }
+                if to_idx == 0 {
+                    list_update.reorder_child_after(&row_update, gtk4::Widget::NONE);
+                } else if let Some(prev) = children.get(to_idx - 1) {
+                    list_update.reorder_child_after(&row_update, Some(prev));
+                }
+            }
         });
 
-        let row_drop = self.container.clone();
-        drop_target.connect_drop(move |_, val, _, _| {
-            row_drop.remove_css_class("drop-target-hover");
-            val.get::<i64>().is_ok_and(|dragged_id| {
-                on_drop(dragged_id, habit_id);
-                true
-            })
+        let row_end = self.container.clone();
+        drag.connect_drag_end(move |_, _, _| {
+            row_end.remove_css_class("dragging-row");
+            row_end.set_cursor_from_name(Some("grab"));
         });
-        self.container.add_controller(drop_target);
+
+        self.container.add_controller(drag);
     }
+}
+
+/// Computes the target row index for a dragged row currently at `current_idx` when the pointer is at `pointer_y`.
+///
+/// `row_spans` is a slice of `(top_y, height)` for each row in visual order.
+#[must_use]
+pub fn target_index_for_drag_y(
+    row_spans: &[(f64, f64)],
+    current_idx: usize,
+    pointer_y: f64,
+) -> usize {
+    if row_spans.is_empty() {
+        return 0;
+    }
+    let clamped_current = current_idx.min(row_spans.len() - 1);
+    let mut target = clamped_current;
+    for (idx, &(top, height)) in row_spans.iter().enumerate() {
+        let midpoint = height.mul_add(0.5, top);
+        if idx > clamped_current && pointer_y > midpoint {
+            target = idx;
+        }
+    }
+    for (idx, &(top, height)) in row_spans.iter().enumerate().rev() {
+        let midpoint = height.mul_add(0.5, top);
+        if idx < clamped_current && pointer_y < midpoint {
+            target = idx;
+        }
+    }
+    target
+}
+
+/// Returns `true` when the staged habit order is identical to the initial order.
+#[must_use]
+pub fn is_habit_order_unchanged(initial: &[i64], staged: &[i64]) -> bool {
+    initial == staged
 }
 
 /// Moves `dragged_id` to the position occupied by `target_id` inside `order`.

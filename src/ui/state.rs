@@ -30,6 +30,7 @@ pub struct DrawCaches {
     pub editor_color: Rc<RefCell<Rgba>>,
     pub editor_habit_id: Rc<RefCell<Option<i64>>>,
     pub reorder_mode: Rc<RefCell<bool>>,
+    pub initial_habit_order: Rc<RefCell<Vec<i64>>>,
     pub staged_habit_order: Rc<RefCell<Vec<i64>>>,
 }
 
@@ -51,6 +52,7 @@ impl DrawCaches {
             editor_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
             editor_habit_id: Rc::new(RefCell::new(None)),
             reorder_mode: Rc::new(RefCell::new(false)),
+            initial_habit_order: Rc::new(RefCell::new(Vec::new())),
             staged_habit_order: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -174,7 +176,7 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
     let mut full_css = String::from(
         ".habit-title {\n  font-weight: 700;\n  padding: 0;\n  line-height: 1;\n}\n\
          .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n  padding: 0;\n  line-height: 1;\n}\n\
-         .drop-target-hover {\n  background-color: rgba(53, 132, 228, 0.16);\n  border-radius: 8px;\n}\n\
+         .dragging-row {\n  background-color: rgba(53, 132, 228, 0.18);\n  border-radius: 8px;\n}\n\
          .loop-popup-box {\n  min-width: 200px;\n}\n\
          .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
          .loop-popup-btn.muted {\n  color: #888888;\n}\n\
@@ -292,22 +294,11 @@ fn rebuild_habit_list(
             continue;
         };
         if is_reorder {
-            let inner_drop = Rc::clone(inner_rc);
-            let caches_drop = caches.clone();
-            row_widget.enable_reorder_drag(habit_id, move |dragged_id, target_id| {
-                let changed = crate::ui::habit_row::move_habit_in_order(
-                    &mut caches_drop.staged_habit_order.borrow_mut(),
-                    dragged_id,
-                    target_id,
-                );
-                if changed {
-                    let inner_idle = Rc::clone(&inner_drop);
-                    let caches_idle = caches_drop.clone();
-                    gtk4::glib::idle_add_local_once(move || {
-                        refresh(&inner_idle, &caches_idle);
-                    });
-                }
-            });
+            row_widget.enable_reorder_drag(
+                habit_id,
+                &inner.habits_list_box,
+                &caches.staged_habit_order,
+            );
         }
         left_group.add_widget(&row_widget.left_box);
         for (i, btn) in row_widget.day_buttons.iter().enumerate() {
