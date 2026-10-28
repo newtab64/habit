@@ -7,3 +7,5 @@ Icon=io.github.habit.Habit
 Terminal=false
 Categories=GNOME;GTK;Utility;
 StartupNotify=true
+SingleMainWindow=true
+X-GNOME-SingleWindow=true

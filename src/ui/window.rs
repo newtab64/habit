@@ -376,9 +376,26 @@ impl AsRef<gtk4::Widget> for HabitWindow {
     }
 }
 
+#[cfg(feature = "ui")]
+fn acquire_instance_lock() -> Option<std::fs::File> {
+    let lock_path = default_database_path().with_file_name("habit.lock");
+    if let Some(parent) = lock_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(lock_path)
+        .ok()?;
+    file.try_lock().ok()?;
+    Some(file)
+}
+
 /// Application entry point: initializes libadwaita and launches `HabitWindow`.
 ///
-/// Configured to run exclusively on Wayland sessions with no X11/Xorg fallback.
+/// Configured to run exclusively on Wayland sessions with no X11/Xorg fallback,
+/// and enforces a strict single-instance lock so only one window can ever run.
 #[cfg(feature = "ui")]
 pub fn run_app() {
     // Enforce Wayland session only; prevent X11/Xorg fallback
@@ -386,7 +403,18 @@ pub fn run_app() {
 
     let app = libadwaita::Application::builder()
         .application_id(crate::APP_ID)
+        .flags(gtk4::gio::ApplicationFlags::FLAGS_NONE)
         .build();
+
+    if app.register(gtk4::gio::Cancellable::NONE).is_ok() && app.is_remote() {
+        app.activate();
+        return;
+    }
+
+    let Some(_instance_lock) = acquire_instance_lock() else {
+        eprintln!("Habit is already running.");
+        return;
+    };
 
     app.connect_activate(|app| {
         if let Some(window) = app
