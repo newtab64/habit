@@ -51,8 +51,8 @@ pub fn build_sidebar() -> SidebarWidgets {
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
-    // Quick-check column headers with compact gap 6
-    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    // Quick-check column headers with compact gap 4
+    let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
     quick_check_header.set_margin_top(8);
@@ -65,7 +65,7 @@ pub fn build_sidebar() -> SidebarWidgets {
     habit_score_label.add_css_class("caption");
     quick_check_header.append(&habit_score_label);
 
-    let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     days_header_box.set_halign(gtk4::Align::End);
     let today = chrono::Local::now().date_naive();
     let dates = calculate_5_day_dates(today);
@@ -75,7 +75,7 @@ pub fn build_sidebar() -> SidebarWidgets {
         let lbl = gtk4::Label::new(Some(&date_str));
         lbl.add_css_class("dim-label");
         lbl.add_css_class("caption");
-        lbl.set_size_request(50, -1);
+        lbl.set_size_request(42, -1);
         lbl.set_halign(gtk4::Align::Center);
         days_header_box.append(&lbl);
         header_day_labels.push(lbl);

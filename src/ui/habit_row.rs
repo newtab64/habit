@@ -140,7 +140,7 @@ pub fn format_day_symbol(
     }
 }
 
-/// Generates scoped CSS for `.habit-row-{habit_id}` tinting symbols and progress bar fill.
+/// Generates scoped CSS for `.habit-row-{habit_id}` tinting day symbols.
 #[must_use]
 pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
     let color = if hex_color.starts_with('#') {
@@ -167,26 +167,12 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
              color: #77767b;\n  \
              opacity: 0.55;\n\
          }}\n\
-         .habit-row-{habit_id} progressbar > trough > progress,\n\
-         .habit-row-{habit_id} .habit-progress > trough > progress,\n\
-         .habit-row-{habit_id} .habit-progress progress {{\n  \
-             background-color: {color};\n  \
-             background-image: none;\n  \
-             min-height: 5px;\n  \
-             border-radius: 3px;\n\
-         }}\n\
-         .habit-row-{habit_id} progressbar > trough,\n\
-         .habit-row-{habit_id} .habit-progress > trough,\n\
-         .habit-row-{habit_id} .habit-progress trough {{\n  \
-             min-height: 5px;\n  \
-             border-radius: 3px;\n\
-         }}\n\
          .habit-row-{habit_id} button.day-symbol-button,\n\
          .habit-row-{habit_id} .day-symbol-button {{\n  \
              border: none;\n  \
              background: none;\n  \
              box-shadow: none;\n  \
-             min-width: 50px;\n  \
+             min-width: 42px;\n  \
              min-height: 46px;\n  \
              padding: 0;\n\
          }}\n\
@@ -200,17 +186,17 @@ pub fn generate_row_css(habit_id: i64, hex_color: &str) -> String {
 /// GTK4 widget representing a single habit row in the fast-check list.
 #[derive(Debug, Clone)]
 pub struct HabitRowWidget {
-    /// The root horizontal box containing title, progress, and 7-day checklist.
+    /// The root horizontal box containing progress ring, title, and 5-day checklist.
     pub container: gtk4::Box,
-    /// Left box containing title and progress bar.
+    /// Left box containing the circular progress ring and habit title.
     pub left_box: gtk4::Box,
     /// The habit title label.
     pub title_label: gtk4::Label,
-    /// Slim 5px progress bar indicating current habit score.
-    pub progress_bar: gtk4::ProgressBar,
-    /// Horizontal box containing the 7 day bare symbol action buttons.
+    /// Circular progress ring indicating current habit score.
+    pub progress_ring: gtk4::DrawingArea,
+    /// Horizontal box containing the 5 day bare symbol action buttons.
     pub days_box: gtk4::Box,
-    /// The 7 day action buttons in chronological order.
+    /// The 5 day action buttons in chronological order.
     pub day_buttons: Vec<gtk4::Button>,
 }
 
@@ -218,31 +204,48 @@ pub struct HabitRowWidget {
 fn create_left_pane<F: Fn(i64) + 'static>(
     name: &str,
     strength: f64,
+    accent_color: &str,
     habit_id: i64,
     on_select: F,
-) -> (gtk4::Box, gtk4::Label, gtk4::ProgressBar) {
-    let left_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+) -> (gtk4::Box, gtk4::Label, gtk4::DrawingArea) {
+    let left_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     left_box.set_hexpand(true);
     left_box.set_valign(gtk4::Align::Center);
+
+    let clamped = if strength.is_finite() {
+        strength.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let rgba = crate::ui::charts::Rgba::from_hex(accent_color)
+        .unwrap_or(crate::ui::charts::Rgba::new(0.21, 0.52, 0.89, 1.0));
+
+    let progress_ring = gtk4::DrawingArea::new();
+    progress_ring.set_content_width(20);
+    progress_ring.set_content_height(20);
+    progress_ring.set_halign(gtk4::Align::Center);
+    progress_ring.set_valign(gtk4::Align::Center);
+    let pct = (clamped * 100.0).round();
+    progress_ring.set_tooltip_text(Some(&format!("{pct:.0}%")));
+    progress_ring.set_draw_func(move |_area, cr, width, height| {
+        crate::ui::charts::draw_progress_ring(
+            cr,
+            f64::from(width),
+            f64::from(height),
+            clamped,
+            &rgba,
+        );
+    });
+    left_box.append(&progress_ring);
 
     let title_label = gtk4::Label::new(None);
     title_label.set_markup(&format!("<b>{}</b>", gtk4::glib::markup_escape_text(name)));
     title_label.set_halign(gtk4::Align::Start);
+    title_label.set_valign(gtk4::Align::Center);
     title_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
     title_label.add_css_class("habit-title");
     title_label.add_css_class("heading");
     left_box.append(&title_label);
-
-    let progress_bar = gtk4::ProgressBar::new();
-    progress_bar.set_fraction(strength.clamp(0.0, 1.0));
-    progress_bar.set_show_text(false);
-    progress_bar.add_css_class("habit-progress");
-    progress_bar.set_halign(gtk4::Align::Start);
-    progress_bar.set_hexpand(false);
-    progress_bar.set_size_request(80, 5);
-    let pct = (strength.clamp(0.0, 1.0) * 100.0).round();
-    progress_bar.set_tooltip_text(Some(&format!("{pct:.0}%")));
-    left_box.append(&progress_bar);
 
     let select_gesture = gtk4::GestureClick::new();
     select_gesture.connect_pressed(move |_, _, _, _| {
@@ -250,7 +253,7 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     });
     left_box.add_controller(select_gesture);
 
-    (left_box, title_label, progress_bar)
+    (left_box, title_label, progress_ring)
 }
 
 #[cfg(feature = "ui")]
@@ -332,17 +335,17 @@ impl HabitRowWidget {
         let on_toggle = std::rc::Rc::new(on_toggle);
 
         // Main horizontal container with clean compact gap between habit info and tickboxes
-        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        let container = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
         container.add_css_class("habit-row");
         let scoped_class = format!("habit-row-{habit_id}");
         container.add_css_class(&scoped_class);
 
-        let (left_box, title_label, progress_bar) =
-            create_left_pane(&habit.name, score, habit_id, on_select);
+        let (left_box, title_label, progress_ring) =
+            create_left_pane(&habit.name, score, &habit.accent_color, habit_id, on_select);
         container.append(&left_box);
 
         // Right box: 5 day symbol columns (today on the left)
-        let days_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+        let days_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
         days_box.set_halign(gtk4::Align::End);
         days_box.set_valign(gtk4::Align::Center);
 
@@ -357,7 +360,7 @@ impl HabitRowWidget {
             let day_btn = gtk4::Button::new();
             day_btn.add_css_class("flat");
             day_btn.add_css_class("day-symbol-button");
-            day_btn.set_size_request(50, 46);
+            day_btn.set_size_request(42, 46);
 
             let day_label = gtk4::Label::new(Some(&display.text));
             day_label.add_css_class("day-symbol");
@@ -403,7 +406,7 @@ impl HabitRowWidget {
             container,
             left_box,
             title_label,
-            progress_bar,
+            progress_ring,
             days_box,
             day_buttons,
         })

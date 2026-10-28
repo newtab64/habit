@@ -241,7 +241,7 @@ impl HabitWindow {
         let window = libadwaita::ApplicationWindow::builder()
             .application(app)
             .title("Habits")
-            .default_width(520)
+            .default_width(430)
             .default_height(700)
             .resizable(false)
             .build();
