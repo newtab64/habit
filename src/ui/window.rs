@@ -34,7 +34,7 @@ fn connect_lock_button(
     let inner_lock = Rc::clone(inner_rc);
     let caches_lock = caches.clone();
     lock_btn.connect_clicked(move |_| {
-        let is_reorder = *caches_lock.reorder_mode.borrow();
+        let is_reorder = caches_lock.reorder_mode.get();
         if is_reorder {
             let staged = caches_lock.staged_habit_order.borrow().clone();
             let db = {
@@ -50,7 +50,7 @@ fn connect_lock_button(
                         "Failed to save habit order: {e}"
                     )));
             }
-            *caches_lock.reorder_mode.borrow_mut() = false;
+            caches_lock.reorder_mode.set(false);
             caches_lock.staged_habit_order.borrow_mut().clear();
         } else {
             let ids: Vec<i64> = {
@@ -64,7 +64,7 @@ fn connect_lock_button(
                     .collect()
             };
             *caches_lock.staged_habit_order.borrow_mut() = ids;
-            *caches_lock.reorder_mode.borrow_mut() = true;
+            caches_lock.reorder_mode.set(true);
         }
         refresh(&inner_lock, &caches_lock);
     });

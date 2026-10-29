@@ -370,24 +370,25 @@ fn connect_heatmap_navigation(
     let inner_prev = Rc::clone(inner_rc);
     let caches_prev = caches.clone();
     details.prev_week_btn.connect_clicked(move |_| {
-        *caches_prev.heatmap_week_offset.borrow_mut() += 12;
+        caches_prev
+            .heatmap_week_offset
+            .set(caches_prev.heatmap_week_offset.get() + 12);
         refresh(&inner_prev, &caches_prev);
     });
 
     let inner_today_btn = Rc::clone(inner_rc);
     let caches_today_btn = caches.clone();
     details.today_week_btn.connect_clicked(move |_| {
-        *caches_today_btn.heatmap_week_offset.borrow_mut() = 0;
+        caches_today_btn.heatmap_week_offset.set(0);
         refresh(&inner_today_btn, &caches_today_btn);
     });
 
     let inner_next = Rc::clone(inner_rc);
     let caches_next = caches.clone();
     details.next_week_btn.connect_clicked(move |_| {
-        {
-            let mut off = caches_next.heatmap_week_offset.borrow_mut();
-            *off = off.saturating_sub(12);
-        }
+        caches_next
+            .heatmap_week_offset
+            .set(caches_next.heatmap_week_offset.get().saturating_sub(12));
         refresh(&inner_next, &caches_next);
     });
 
@@ -520,8 +521,8 @@ pub fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
     details
         .ring_drawing_area
         .set_draw_func(move |_area, cr, width, height| {
-            let score = *overview_score_draw.borrow();
-            let color = overview_color_draw.borrow();
+            let score = overview_score_draw.get();
+            let color = overview_color_draw.get();
             draw_progress_ring(cr, f64::from(width), f64::from(height), score, &color);
         });
 
@@ -531,7 +532,7 @@ pub fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
         .curve_drawing_area
         .set_draw_func(move |_area, cr, width, height| {
             let data = curve_data_draw.borrow();
-            let color = curve_color_draw.borrow();
+            let color = curve_color_draw.get();
             draw_strength_curve(cr, f64::from(width), f64::from(height), &data, &color);
         });
 
@@ -543,9 +544,9 @@ pub fn connect_drawing_areas(details: &DetailsWidgets, caches: &DrawCaches) {
         .heatmap_drawing_area
         .set_draw_func(move |_area, cr, width, height| {
             let entries = heatmap_entries_draw.borrow();
-            let color = heatmap_color_draw.borrow();
-            let week_offset = *heatmap_offset_draw.borrow();
-            let today = *heatmap_today_draw.borrow();
+            let color = heatmap_color_draw.get();
+            let week_offset = heatmap_offset_draw.get();
+            let today = heatmap_today_draw.get();
             draw_loop_heatmap(
                 cr,
                 f64::from(width),

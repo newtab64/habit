@@ -139,9 +139,9 @@ impl HistoryEditorWidgets {
         };
         if let Some(habit) = habit_opt {
             let Some(habit_id) = habit.id else { return };
-            *caches.editor_habit_id.borrow_mut() = Some(habit_id);
-            *caches.editor_week_offset.borrow_mut() = 0;
-            *caches.editor_color.borrow_mut() = habit.accent_rgba();
+            caches.editor_habit_id.set(Some(habit_id));
+            caches.editor_week_offset.set(0);
+            caches.editor_color.set(habit.accent_rgba());
 
             let today = chrono::Local::now().date_naive();
             let start_date = today - chrono::Duration::weeks(104);
@@ -184,8 +184,8 @@ impl HistoryEditorWidgets {
         self.drawing_area
             .set_draw_func(move |_area, cr, width, height| {
                 let entries = editor_entries_draw.borrow();
-                let color = editor_color_draw.borrow();
-                let week_offset = *editor_offset_draw.borrow();
+                let color = editor_color_draw.get();
+                let week_offset = editor_offset_draw.get();
                 let today = chrono::Local::now().date_naive();
                 draw_loop_heatmap(
                     cr,
@@ -234,13 +234,12 @@ impl HistoryEditorWidgets {
         let area_scroll = self.drawing_area.clone();
         scroll.connect_scroll(move |_, dx, dy| {
             let delta = if dy.abs() > dx.abs() { dy } else { dx };
-            let mut off = offset_scroll.borrow_mut();
+            let off = offset_scroll.get();
             if delta > 0.0 {
-                *off = (*off + 2).min(104);
+                offset_scroll.set((off + 2).min(104));
             } else if delta < 0.0 {
-                *off = off.saturating_sub(2);
+                offset_scroll.set(off.saturating_sub(2));
             }
-            drop(off);
             area_scroll.queue_draw();
             gtk4::glib::Propagation::Stop
         });
@@ -255,7 +254,7 @@ impl HistoryEditorWidgets {
         let inner_click = Rc::clone(inner_rc);
         let caches_click = caches.clone();
         click_gesture.connect_pressed(move |_, _, x, y| {
-            let Some(habit_id) = *habit_id_click.borrow() else {
+            let Some(habit_id) = habit_id_click.get() else {
                 return;
             };
             let habit = {
@@ -268,7 +267,7 @@ impl HistoryEditorWidgets {
             let width = f64::from(area_click.width());
             let height = f64::from(area_click.height());
             let today = chrono::Local::now().date_naive();
-            let offset = *offset_click.borrow();
+            let offset = offset_click.get();
             if let Some(clicked_date) = loop_heatmap_hit_test(x, y, width, height, today, offset) {
                 if clicked_date <= today {
                     handle_history_click(

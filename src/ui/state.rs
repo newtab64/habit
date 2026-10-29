@@ -8,7 +8,7 @@ use crate::ui::metrics::{
 };
 use chrono::{Datelike, NaiveDate};
 use gtk4::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -18,18 +18,18 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct DrawCaches {
     pub curve_data: Rc<RefCell<Vec<f64>>>,
-    pub curve_color: Rc<RefCell<Rgba>>,
+    pub curve_color: Rc<Cell<Rgba>>,
     pub heatmap_entries: Rc<RefCell<HashMap<NaiveDate, EntryStatus>>>,
-    pub heatmap_color: Rc<RefCell<Rgba>>,
-    pub heatmap_week_offset: Rc<RefCell<usize>>,
-    pub heatmap_today: Rc<RefCell<NaiveDate>>,
-    pub overview_score: Rc<RefCell<f64>>,
-    pub overview_color: Rc<RefCell<Rgba>>,
+    pub heatmap_color: Rc<Cell<Rgba>>,
+    pub heatmap_week_offset: Rc<Cell<usize>>,
+    pub heatmap_today: Rc<Cell<NaiveDate>>,
+    pub overview_score: Rc<Cell<f64>>,
+    pub overview_color: Rc<Cell<Rgba>>,
     pub editor_entries: Rc<RefCell<HashMap<NaiveDate, EntryStatus>>>,
-    pub editor_week_offset: Rc<RefCell<usize>>,
-    pub editor_color: Rc<RefCell<Rgba>>,
-    pub editor_habit_id: Rc<RefCell<Option<i64>>>,
-    pub reorder_mode: Rc<RefCell<bool>>,
+    pub editor_week_offset: Rc<Cell<usize>>,
+    pub editor_color: Rc<Cell<Rgba>>,
+    pub editor_habit_id: Rc<Cell<Option<i64>>>,
+    pub reorder_mode: Rc<Cell<bool>>,
     pub staged_habit_order: Rc<RefCell<Vec<i64>>>,
 }
 
@@ -39,18 +39,18 @@ impl DrawCaches {
     pub fn new(today: NaiveDate) -> Self {
         Self {
             curve_data: Rc::new(RefCell::new(Vec::new())),
-            curve_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
+            curve_color: Rc::new(Cell::new(DEFAULT_ACCENT)),
             heatmap_entries: Rc::new(RefCell::new(HashMap::new())),
-            heatmap_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
-            heatmap_week_offset: Rc::new(RefCell::new(0)),
-            heatmap_today: Rc::new(RefCell::new(today)),
-            overview_score: Rc::new(RefCell::new(0.0)),
-            overview_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
+            heatmap_color: Rc::new(Cell::new(DEFAULT_ACCENT)),
+            heatmap_week_offset: Rc::new(Cell::new(0)),
+            heatmap_today: Rc::new(Cell::new(today)),
+            overview_score: Rc::new(Cell::new(0.0)),
+            overview_color: Rc::new(Cell::new(DEFAULT_ACCENT)),
             editor_entries: Rc::new(RefCell::new(HashMap::new())),
-            editor_week_offset: Rc::new(RefCell::new(0)),
-            editor_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
-            editor_habit_id: Rc::new(RefCell::new(None)),
-            reorder_mode: Rc::new(RefCell::new(false)),
+            editor_week_offset: Rc::new(Cell::new(0)),
+            editor_color: Rc::new(Cell::new(DEFAULT_ACCENT)),
+            editor_habit_id: Rc::new(Cell::new(None)),
+            reorder_mode: Rc::new(Cell::new(false)),
             staged_habit_order: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -141,7 +141,7 @@ pub fn handle_toggle(
 
 /// Handles selecting a habit and optionally navigating to its details view.
 pub fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, habit_id: i64) {
-    if *caches.reorder_mode.borrow() {
+    if caches.reorder_mode.get() {
         return;
     }
     let (nav_view, details_page, should_push) = {
@@ -232,7 +232,7 @@ fn rebuild_habit_list(
         inner.habits_list_box.remove(&child);
     }
 
-    let is_reorder = *caches.reorder_mode.borrow();
+    let is_reorder = caches.reorder_mode.get();
     inner.lock_btn.set_icon_name(if is_reorder {
         "changes-allow-symbolic"
     } else {
@@ -323,15 +323,15 @@ fn update_charts(
     let rgba = selected_habit.accent_rgba();
 
     *caches.curve_data.borrow_mut() = curve_pts;
-    *caches.curve_color.borrow_mut() = rgba;
+    caches.curve_color.set(rgba);
     inner.curve_drawing_area.queue_draw();
 
-    *caches.overview_score.borrow_mut() = metrics.score;
-    *caches.overview_color.borrow_mut() = rgba;
+    caches.overview_score.set(metrics.score);
+    caches.overview_color.set(rgba);
     inner.ring_drawing_area.queue_draw();
 
     // Continuous rolling-weeks heatmap data (Loop Habit Tracker style)
-    let week_offset = *caches.heatmap_week_offset.borrow();
+    let week_offset = caches.heatmap_week_offset.get();
     inner.next_week_btn.set_sensitive(week_offset > 0);
     inner.today_week_btn.set_sensitive(week_offset > 0);
 
@@ -360,8 +360,8 @@ fn update_charts(
     }
 
     *caches.heatmap_entries.borrow_mut() = map;
-    *caches.heatmap_color.borrow_mut() = rgba;
-    *caches.heatmap_today.borrow_mut() = today;
+    caches.heatmap_color.set(rgba);
+    caches.heatmap_today.set(today);
     inner.heatmap_drawing_area.queue_draw();
 }
 
