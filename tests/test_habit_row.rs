@@ -6,15 +6,15 @@ use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_WORKDAYS,
 };
 use habit::ui::habit_row::{
-    calculate_5_day_dates, format_day_symbol, generate_row_css, next_toggle_status,
-    DaySymbolDisplay,
+    calculate_quick_check_dates, format_day_symbol, generate_row_css, next_toggle_status,
+    DaySymbolDisplay, QUICK_CHECK_DAYS,
 };
 
 #[test]
 fn test_5_day_dates_today_on_left() {
     let today = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
-    let dates = calculate_5_day_dates(today);
-    assert_eq!(dates.len(), 5);
+    let dates = calculate_quick_check_dates(today);
+    assert_eq!(dates.len(), QUICK_CHECK_DAYS);
     // Index 0 is today (on the left)
     assert_eq!(dates[0], today);
     assert_eq!(dates[1], today - chrono::Duration::days(1));
@@ -26,7 +26,7 @@ fn test_5_day_dates_today_on_left() {
 #[test]
 fn test_5_day_dates_month_and_year_boundaries() {
     let jan_2 = NaiveDate::from_ymd_opt(2026, 1, 2).expect("Valid date");
-    let dates_jan = calculate_5_day_dates(jan_2);
+    let dates_jan = calculate_quick_check_dates(jan_2);
     assert_eq!(dates_jan[0], NaiveDate::from_ymd_opt(2026, 1, 2).unwrap());
     assert_eq!(dates_jan[1], NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
     assert_eq!(dates_jan[2], NaiveDate::from_ymd_opt(2025, 12, 31).unwrap());

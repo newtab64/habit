@@ -162,7 +162,7 @@ pub fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, h
 
 /// Refreshes the UI state, habits list, metrics, charts, and heatmaps.
 fn update_header_dates(labels: &[gtk4::Label], today: NaiveDate) {
-    let dates = crate::ui::habit_row::calculate_5_day_dates(today);
+    let dates = crate::ui::habit_row::calculate_quick_check_dates(today);
     for (i, d) in dates.iter().enumerate() {
         if let Some(lbl) = labels.get(i) {
             lbl.set_text(&d.format("%m/%d").to_string());
@@ -218,7 +218,7 @@ fn rebuild_habit_list(
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
     left_group.add_widget(&inner.habit_score_label);
 
-    let col_groups: Vec<gtk4::SizeGroup> = (0..5)
+    let col_groups: Vec<gtk4::SizeGroup> = (0..crate::ui::habit_row::QUICK_CHECK_DAYS)
         .map(|i| {
             let sg = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
             if let Some(lbl) = inner.header_day_labels.get(i) {

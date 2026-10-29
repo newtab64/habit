@@ -5,7 +5,7 @@
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
-use crate::ui::habit_row::calculate_5_day_dates;
+use crate::ui::habit_row::{calculate_quick_check_dates, QUICK_CHECK_DAYS};
 
 /// Holds UI widget handles comprising the habit list sidebar page.
 #[derive(Debug, Clone)]
@@ -75,8 +75,8 @@ pub fn build_sidebar() -> SidebarWidgets {
     let days_header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     days_header_box.set_halign(gtk4::Align::End);
     let today = chrono::Local::now().date_naive();
-    let dates = calculate_5_day_dates(today);
-    let mut header_day_labels = Vec::with_capacity(5);
+    let dates = calculate_quick_check_dates(today);
+    let mut header_day_labels = Vec::with_capacity(QUICK_CHECK_DAYS);
     for date in dates {
         let date_str = date.format("%m/%d").to_string();
         let lbl = gtk4::Label::new(Some(&date_str));

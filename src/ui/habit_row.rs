@@ -7,24 +7,15 @@ use gtk4::prelude::*;
 /// Number of days displayed in the quick-check row (5 days: today down to today - 4).
 pub const QUICK_CHECK_DAYS: usize = 5;
 
-/// Calculates the array of 5 consecutive dates starting from `today` on the left (`today` down to `today - 4`).
+/// Calculates the array of `QUICK_CHECK_DAYS` consecutive dates starting from `today` on the left (`today` down to `today - 4`).
 #[must_use]
-pub fn calculate_5_day_dates(today: NaiveDate) -> [NaiveDate; 5] {
-    [
-        today,
+pub fn calculate_quick_check_dates(today: NaiveDate) -> [NaiveDate; QUICK_CHECK_DAYS] {
+    std::array::from_fn(|i| {
+        let offset = i64::try_from(i).unwrap_or(0);
         today
-            .checked_sub_signed(chrono::Duration::days(1))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(2))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(3))
-            .unwrap_or(today),
-        today
-            .checked_sub_signed(chrono::Duration::days(4))
-            .unwrap_or(today),
-    ]
+            .checked_sub_signed(chrono::Duration::days(offset))
+            .unwrap_or(today)
+    })
 }
 
 /// Visual display attributes for a single day column in a habit row.
@@ -360,9 +351,9 @@ impl HabitRowWidget {
         days_box.set_halign(gtk4::Align::End);
         days_box.set_valign(gtk4::Align::Center);
 
-        let dates = calculate_5_day_dates(today);
+        let dates = calculate_quick_check_dates(today);
         let is_measurable = habit.habit_type.is_measurable();
-        let mut day_buttons = Vec::with_capacity(5);
+        let mut day_buttons = Vec::with_capacity(QUICK_CHECK_DAYS);
 
         for date in dates {
             let entry = entries.iter().find(|e| e.date == date);
