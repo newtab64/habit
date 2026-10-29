@@ -127,8 +127,8 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
     let (filter, filters) = sqlite_file_filters();
 
     let dialog = gtk4::FileDialog::builder()
-        .title("Import Database Backup")
-        .accept_label("Import")
+        .title("Restore Database Backup")
+        .accept_label("Restore")
         .default_filter(&filter)
         .filters(&filters)
         .build();

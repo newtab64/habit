@@ -173,7 +173,7 @@ fn register_import_action(
             }
             DialogOutcome::Cancelled => {}
             DialogOutcome::Failed(err) => {
-                toast.add_toast(libadwaita::Toast::new(&format!("Import failed: {err}")));
+                toast.add_toast(libadwaita::Toast::new(&format!("Restore failed: {err}")));
             }
         });
     });
@@ -189,8 +189,8 @@ fn setup_primary_menu(
     toast_overlay: &libadwaita::ToastOverlay,
 ) {
     let menu_model = gtk4::gio::Menu::new();
-    menu_model.append(Some("Export Backup..."), Some("win.export-backup"));
-    menu_model.append(Some("Import Backup..."), Some("win.import-backup"));
+    menu_model.append(Some("Export Data"), Some("win.export-backup"));
+    menu_model.append(Some("Restore Data"), Some("win.import-backup"));
     menu_model.append(Some("About Habit"), Some("win.about"));
     menu_btn.set_menu_model(Some(&menu_model));
 
