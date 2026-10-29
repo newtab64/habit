@@ -15,7 +15,7 @@ use gtk4::prelude::*;
 #[cfg(feature = "ui")]
 use crate::engine::models::EntryStatus;
 #[cfg(feature = "ui")]
-use crate::ui::charts::{draw_loop_heatmap, loop_heatmap_hit_test, Rgba};
+use crate::ui::charts::{draw_loop_heatmap, loop_heatmap_hit_test};
 #[cfg(feature = "ui")]
 use crate::ui::state::{refresh, DrawCaches, WindowInner};
 
@@ -141,9 +141,7 @@ impl HistoryEditorWidgets {
             let Some(habit_id) = habit.id else { return };
             *caches.editor_habit_id.borrow_mut() = Some(habit_id);
             *caches.editor_week_offset.borrow_mut() = 0;
-            let habit_color =
-                Rgba::from_hex(&habit.accent_color).unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
-            *caches.editor_color.borrow_mut() = habit_color;
+            *caches.editor_color.borrow_mut() = habit.accent_rgba();
 
             let today = chrono::Local::now().date_naive();
             let start_date = today - chrono::Duration::weeks(104);

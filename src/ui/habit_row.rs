@@ -200,7 +200,7 @@ pub struct HabitRowWidget {
 fn create_left_pane<F: Fn(i64) + 'static>(
     name: &str,
     strength: f64,
-    accent_color: &str,
+    rgba: crate::ui::charts::Rgba,
     habit_id: i64,
     on_select: F,
 ) -> (gtk4::Box, gtk4::Label, gtk4::DrawingArea) {
@@ -213,8 +213,6 @@ fn create_left_pane<F: Fn(i64) + 'static>(
     } else {
         0.0
     };
-    let rgba = crate::ui::charts::Rgba::from_hex(accent_color)
-        .unwrap_or(crate::ui::charts::Rgba::new(0.21, 0.52, 0.89, 1.0));
 
     let progress_ring = gtk4::DrawingArea::new();
     progress_ring.set_content_width(20);
@@ -343,7 +341,7 @@ impl HabitRowWidget {
         container.add_css_class(&scoped_class);
 
         let (left_box, title_label, progress_ring) =
-            create_left_pane(&habit.name, score, &habit.accent_color, habit_id, on_select);
+            create_left_pane(&habit.name, score, habit.accent_rgba(), habit_id, on_select);
         container.append(&left_box);
 
         // Right box: 5 day symbol columns (today on the left)

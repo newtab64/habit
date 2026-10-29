@@ -1,7 +1,7 @@
 use crate::engine::db::Database;
 use crate::engine::models::{EntryStatus, Habit, HabitEntry};
 use crate::engine::scoring::{calculate_habit_score, calculate_strength_history};
-use crate::ui::charts::Rgba;
+use crate::ui::charts::{Rgba, DEFAULT_ACCENT};
 use crate::ui::habit_row::HabitRowWidget;
 use crate::ui::metrics::{
     calculate_habit_metrics, format_schedule_summary, format_target_summary, toggle_entry_state,
@@ -39,16 +39,16 @@ impl DrawCaches {
     pub fn new(today: NaiveDate) -> Self {
         Self {
             curve_data: Rc::new(RefCell::new(Vec::new())),
-            curve_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            curve_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
             heatmap_entries: Rc::new(RefCell::new(HashMap::new())),
-            heatmap_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            heatmap_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
             heatmap_week_offset: Rc::new(RefCell::new(0)),
             heatmap_today: Rc::new(RefCell::new(today)),
             overview_score: Rc::new(RefCell::new(0.0)),
-            overview_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            overview_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
             editor_entries: Rc::new(RefCell::new(HashMap::new())),
             editor_week_offset: Rc::new(RefCell::new(0)),
-            editor_color: Rc::new(RefCell::new(Rgba::new(0.21, 0.52, 0.89, 1.0))),
+            editor_color: Rc::new(RefCell::new(DEFAULT_ACCENT)),
             editor_habit_id: Rc::new(RefCell::new(None)),
             reorder_mode: Rc::new(RefCell::new(false)),
             staged_habit_order: Rc::new(RefCell::new(Vec::new())),
@@ -320,8 +320,7 @@ fn update_charts(
     today: NaiveDate,
 ) {
     let curve_pts = calculate_strength_history(selected_habit, all_entries, 30, today);
-    let rgba =
-        Rgba::from_hex(&selected_habit.accent_color).unwrap_or(Rgba::new(0.21, 0.52, 0.89, 1.0));
+    let rgba = selected_habit.accent_rgba();
 
     *caches.curve_data.borrow_mut() = curve_pts;
     *caches.curve_color.borrow_mut() = rgba;

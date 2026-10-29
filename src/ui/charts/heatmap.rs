@@ -188,22 +188,7 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
         } else if last_month.is_none_or(|m| m != cur_month) {
             last_month = Some(cur_month);
             last_year = Some(cur_year);
-            match cur_month {
-                1 => "Jan",
-                2 => "Feb",
-                3 => "Mar",
-                4 => "Apr",
-                5 => "May",
-                6 => "Jun",
-                7 => "Jul",
-                8 => "Aug",
-                9 => "Sep",
-                10 => "Oct",
-                11 => "Nov",
-                12 => "Dec",
-                _ => "",
-            }
-            .to_string()
+            col_monday.format("%b").to_string()
         } else {
             String::new()
         };

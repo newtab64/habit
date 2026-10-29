@@ -47,6 +47,9 @@ impl Rect {
     }
 }
 
+/// Default GNOME blue accent color (`#3584E4`).
+pub const DEFAULT_ACCENT: Rgba = Rgba::new(0.21, 0.52, 0.89, 1.0);
+
 /// Normalized RGBA color with channel values in the range `0.0..=1.0`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rgba {
