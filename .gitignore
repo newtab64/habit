@@ -1,5 +1,6 @@
 
 .superpowers/
+docs/superpowers/
 /target/
 .flatpak-builder/
 build-dir/

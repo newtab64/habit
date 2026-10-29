@@ -1,8 +1,8 @@
 use chrono::{NaiveDate, Weekday};
 use habit::engine::models::{
-    is_valid_hex_color, normalize_hex_color, ColorError, EntryStatus, Habit, HabitEntry, HabitType,
-    SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON, SCHEDULE_SAT, SCHEDULE_SUN, SCHEDULE_THU,
-    SCHEDULE_TUE, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
+    normalize_hex_color, ColorError, EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS,
+    SCHEDULE_FRI, SCHEDULE_MON, SCHEDULE_SAT, SCHEDULE_SUN, SCHEDULE_THU, SCHEDULE_TUE,
+    SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 
 #[test]
@@ -80,15 +80,12 @@ fn test_hex_color_validation_and_normalization() {
     assert_eq!(normalize_hex_color("#FF7800").unwrap(), "#FF7800");
     assert_eq!(normalize_hex_color("   #e01b24   ").unwrap(), "#E01B24");
 
-    assert!(is_valid_hex_color("#3584E4"));
-    assert!(is_valid_hex_color("3584E4"));
-    assert!(!is_valid_hex_color("#12345"));
-    assert!(!is_valid_hex_color("#1234567"));
-    assert!(!is_valid_hex_color("#ZZZZZZ"));
-    assert!(!is_valid_hex_color(""));
-
     assert_eq!(normalize_hex_color(""), Err(ColorError::Empty));
     assert_eq!(normalize_hex_color("#123"), Err(ColorError::InvalidFormat));
+    assert_eq!(
+        normalize_hex_color("#1234567"),
+        Err(ColorError::InvalidFormat)
+    );
     assert_eq!(
         normalize_hex_color("#12345G"),
         Err(ColorError::InvalidHexDigit('G'))

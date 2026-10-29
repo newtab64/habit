@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use habit::ui::charts::{
-    calculate_curve_points, calculate_loop_heatmap_layout, draw_progress_ring,
-    loop_heatmap_cell_rect, loop_heatmap_hit_test, Point, Rect, Rgba,
+    calculate_curve_points, calculate_loop_heatmap_layout, loop_heatmap_cell_rect,
+    loop_heatmap_hit_test, Point, Rect, Rgba,
 };
 
 #[test]
@@ -241,6 +241,7 @@ fn test_loop_heatmap_hit_test_today_and_past() {
 #[cfg(feature = "ui")]
 #[test]
 fn test_draw_progress_ring() {
+    use habit::ui::charts::draw_progress_ring;
     let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, 40, 40)
         .expect("Failed to create test image surface");
     let cr = gtk4::cairo::Context::new(&surface).expect("Failed to create cairo context");

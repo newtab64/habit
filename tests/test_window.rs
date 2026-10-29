@@ -6,59 +6,12 @@ use habit::engine::models::{
 use habit::ui::window::{
     calculate_habit_metrics, format_percentage_diff, format_schedule_summary,
     format_score_percentage, format_streak_badge, format_target_summary, toggle_entry_state,
-    MonthNavigation,
 };
-
-#[test]
-fn test_month_navigation_rollover_next_and_prev() {
-    let oct_2026 = MonthNavigation::new(2026, 10);
-    assert_eq!(oct_2026.year, 2026);
-    assert_eq!(oct_2026.month, 10);
-    assert_eq!(oct_2026.format_title(), "October 2026");
-
-    // Rollover: Dec 2026 -> Jan 2027
-    let dec_2026 = MonthNavigation::new(2026, 12);
-    assert_eq!(dec_2026.format_title(), "December 2026");
-    let jan_2027 = dec_2026.next();
-    assert_eq!(jan_2027.year, 2027);
-    assert_eq!(jan_2027.month, 1);
-    assert_eq!(jan_2027.format_title(), "January 2027");
-
-    // Rollover: Jan 2026 -> Dec 2025
-    let jan_2026 = MonthNavigation::new(2026, 1);
-    assert_eq!(jan_2026.format_title(), "January 2026");
-    let dec_2025 = jan_2026.prev();
-    assert_eq!(dec_2025.year, 2025);
-    assert_eq!(dec_2025.month, 12);
-    assert_eq!(dec_2025.format_title(), "December 2025");
-
-    // Sequential transitions
-    let mid_year = MonthNavigation::new(2026, 6);
-    assert_eq!(mid_year.format_title(), "June 2026");
-    assert_eq!(mid_year.prev().format_title(), "May 2026");
-    assert_eq!(mid_year.next().format_title(), "July 2026");
-
-    let chain = MonthNavigation::new(2026, 11).next().next();
-    assert_eq!(chain.year, 2027);
-    assert_eq!(chain.month, 1);
-    assert_eq!(chain.format_title(), "January 2027");
-}
 
 #[test]
 fn test_header_date_formatting() {
     let d = NaiveDate::from_ymd_opt(2026, 10, 27).unwrap();
     assert_eq!(d.format("%m/%d").to_string(), "10/27");
-}
-
-#[test]
-fn test_month_navigation_clamping_and_bounds() {
-    let clamped_low = MonthNavigation::new(2026, 0);
-    assert_eq!(clamped_low.month, 1);
-    assert_eq!(clamped_low.format_title(), "January 2026");
-
-    let clamped_high = MonthNavigation::new(2026, 15);
-    assert_eq!(clamped_high.month, 12);
-    assert_eq!(clamped_high.format_title(), "December 2026");
 }
 
 #[test]

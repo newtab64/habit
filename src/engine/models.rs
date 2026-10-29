@@ -101,12 +101,6 @@ pub fn normalize_hex_color(input: &str) -> Result<String, ColorError> {
     Ok(normalized)
 }
 
-/// Checks whether a given string is a valid 6-digit hex color format.
-#[must_use]
-pub fn is_valid_hex_color(input: &str) -> bool {
-    normalize_hex_color(input).is_ok()
-}
-
 /// The status of a habit entry on a specific date.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EntryStatus {

@@ -164,12 +164,6 @@ pub fn calculate_habit_score(habit: &Habit, entries: &[HabitEntry], as_of: Naive
     score
 }
 
-/// Backwards-compatibility alias for `calculate_habit_score`.
-#[must_use]
-pub fn calculate_habit_strength(habit: &Habit, entries: &[HabitEntry], as_of: NaiveDate) -> f64 {
-    calculate_habit_score(habit, entries, as_of)
-}
-
 /// Calculates the current and best streaks as of the given date.
 ///
 /// Returns `(current_streak, best_streak)`:

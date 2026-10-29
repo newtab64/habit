@@ -1,8 +1,7 @@
 use chrono::NaiveDate;
 use habit::engine::models::{EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS};
 use habit::engine::scoring::{
-    calculate_habit_score, calculate_habit_strength, calculate_streaks, calculate_strength_history,
-    DEFAULT_HALF_LIFE_DAYS,
+    calculate_habit_score, calculate_streaks, calculate_strength_history, DEFAULT_HALF_LIFE_DAYS,
 };
 
 #[test]
@@ -53,9 +52,9 @@ fn test_predefined_rest_days_do_not_decay_or_break_streak() {
     assert_eq!(curr, 2); // 2 workout sessions completed across rest day
     assert_eq!(best, 2);
 
-    let strength_d1 = calculate_habit_strength(&gym, &entries, d1);
-    let strength_d2 = calculate_habit_strength(&gym, &entries, d2);
-    let strength_d3 = calculate_habit_strength(&gym, &entries, d3);
+    let strength_d1 = calculate_habit_score(&gym, &entries, d1);
+    let strength_d2 = calculate_habit_score(&gym, &entries, d2);
+    let strength_d3 = calculate_habit_score(&gym, &entries, d3);
 
     // Tuesday (rest day) preserves strength without decay
     assert!((strength_d1 - strength_d2).abs() < f64::EPSILON);
@@ -80,8 +79,8 @@ fn test_predefined_rest_days_without_logged_entries() {
     assert_eq!(curr, 2);
     assert_eq!(best, 2);
 
-    let s1 = calculate_habit_strength(&gym, &entries, d1);
-    let s2 = calculate_habit_strength(&gym, &entries, d2);
+    let s1 = calculate_habit_score(&gym, &entries, d1);
+    let s2 = calculate_habit_score(&gym, &entries, d2);
     assert!((s1 - s2).abs() < f64::EPSILON);
 }
 
@@ -97,7 +96,7 @@ fn test_measurable_partial_progress_does_not_add_strength_or_keep_streak() {
     }];
     let (curr, _) = calculate_streaks(&reading, &partial_entries, d);
     assert_eq!(curr, 0); // Partial progress breaks streak
-    let strength = calculate_habit_strength(&reading, &partial_entries, d);
+    let strength = calculate_habit_score(&reading, &partial_entries, d);
     assert_eq!(strength, 0.0); // Does not add to strength
 }
 
@@ -116,8 +115,8 @@ fn test_measurable_completion_meets_or_exceeds_target() {
     assert_eq!(curr, 2);
     assert_eq!(best, 2);
 
-    let s1 = calculate_habit_strength(&reading, &entries, d1);
-    let s2 = calculate_habit_strength(&reading, &entries, d2);
+    let s1 = calculate_habit_score(&reading, &entries, d1);
+    let s2 = calculate_habit_score(&reading, &entries, d2);
     assert!(s1 > 0.0);
     assert!(s2 > s1);
 }
@@ -136,9 +135,9 @@ fn test_exponential_decay_half_life() {
         entries.push(HabitEntry::new(1, date, EntryStatus::Missed, 0.0));
     }
 
-    let initial_strength = calculate_habit_strength(&habit, &entries[..1], d0);
+    let initial_strength = calculate_habit_score(&habit, &entries[..1], d0);
     let d14 = d0 + chrono::Days::new(half_life_days);
-    let half_strength = calculate_habit_strength(&habit, &entries, d14);
+    let half_strength = calculate_habit_score(&habit, &entries, d14);
 
     // After DEFAULT_HALF_LIFE_DAYS (14 days), strength should decay to half: S_14 ≈ S_0 * 0.5
     let ratio = half_strength / initial_strength;
@@ -189,8 +188,8 @@ fn test_today_unlogged_preserves_streak_and_strength() {
     assert_eq!(curr, 1);
     assert_eq!(best, 1);
 
-    let s1 = calculate_habit_strength(&habit, &entries, d1);
-    let s2 = calculate_habit_strength(&habit, &entries, d2);
+    let s1 = calculate_habit_score(&habit, &entries, d1);
+    let s2 = calculate_habit_score(&habit, &entries, d2);
     // Does not penalize today yet
     assert!((s1 - s2).abs() < f64::EPSILON);
 }
@@ -210,8 +209,8 @@ fn test_today_explicitly_missed_resets_streak() {
     assert_eq!(curr, 0);
     assert_eq!(best, 1);
 
-    let s1 = calculate_habit_strength(&habit, &entries, d1);
-    let s2 = calculate_habit_strength(&habit, &entries, d2);
+    let s1 = calculate_habit_score(&habit, &entries, d1);
+    let s2 = calculate_habit_score(&habit, &entries, d2);
     assert!(s2 < s1);
 }
 
@@ -232,8 +231,8 @@ fn test_manual_skip_on_scheduled_day_acts_as_neutral_bridge() {
     assert_eq!(curr, 2);
     assert_eq!(best, 2);
 
-    let s1 = calculate_habit_strength(&habit, &entries, d1);
-    let s2 = calculate_habit_strength(&habit, &entries, d2);
+    let s1 = calculate_habit_score(&habit, &entries, d1);
+    let s2 = calculate_habit_score(&habit, &entries, d2);
     assert!((s1 - s2).abs() < f64::EPSILON);
 }
 
@@ -258,10 +257,10 @@ fn test_strength_history() {
     assert_eq!(history[0], 0.0);
     assert_eq!(history[1], 0.0);
 
-    // Days d1..d3 should match calculate_habit_strength
-    let s1 = calculate_habit_strength(&habit, &entries, d1);
-    let s2 = calculate_habit_strength(&habit, &entries, d2);
-    let s3 = calculate_habit_strength(&habit, &entries, d3);
+    // Days d1..d3 should match calculate_habit_score
+    let s1 = calculate_habit_score(&habit, &entries, d1);
+    let s2 = calculate_habit_score(&habit, &entries, d2);
+    let s3 = calculate_habit_score(&habit, &entries, d3);
 
     assert!((history[2] - s1).abs() < 1e-9);
     assert!((history[3] - s2).abs() < 1e-9);
@@ -279,7 +278,7 @@ fn test_empty_entries_handling() {
     assert_eq!(curr, 0);
     assert_eq!(best, 0);
 
-    let strength = calculate_habit_strength(&habit, &entries, d);
+    let strength = calculate_habit_score(&habit, &entries, d);
     assert_eq!(strength, 0.0);
 
     let history = calculate_strength_history(&habit, &entries, 7, d);
@@ -353,7 +352,7 @@ fn test_weekend_only_habit_streak_and_strength() {
     assert_eq!(curr, 4); // 4 weekend sessions completed across 5 rest days
     assert_eq!(best, 4);
 
-    let strength = calculate_habit_strength(&weekend_habit, &entries, sun2);
+    let strength = calculate_habit_score(&weekend_habit, &entries, sun2);
     assert!(strength > 0.0);
 }
 
@@ -375,7 +374,7 @@ fn test_entries_after_as_of_are_ignored() {
     assert_eq!(curr, 2);
     assert_eq!(best, 2);
 
-    let s2 = calculate_habit_strength(&habit, &entries, d2);
-    let s3 = calculate_habit_strength(&habit, &entries, d3);
+    let s2 = calculate_habit_score(&habit, &entries, d2);
+    let s3 = calculate_habit_score(&habit, &entries, d3);
     assert!(s3 > s2);
 }
