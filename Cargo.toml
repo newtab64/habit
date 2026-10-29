@@ -6,6 +6,11 @@ authors = ["Habit Contributors"]
 description = "A native, local-only Linux habit tracker app for GNOME"
 license = "GPL-3.0-or-later"
 
+[[bin]]
+name = "habit"
+path = "src/main.rs"
+required-features = ["ui"]
+
 [dependencies]
 rusqlite = { version = "0.41", features = ["bundled", "backup"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
