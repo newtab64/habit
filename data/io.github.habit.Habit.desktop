@@ -1,11 +1,12 @@
 [Desktop Entry]
 Name=Habit
-Comment=Track habits with exponential decay scoring and pre-defined rest days
+Comment=Track your daily habits
 Type=Application
 Exec=habit
 Icon=io.github.habit.Habit
 Terminal=false
 Categories=GNOME;GTK;Utility;
+Keywords=habit;habits;routine;tracker;streak;goals;
 StartupNotify=true
 SingleMainWindow=true
 X-GNOME-SingleWindow=true

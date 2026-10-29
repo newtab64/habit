@@ -1,56 +1,37 @@
 # Habit
 
-A clean, simple habit tracker for Linux, inspired by Loop Habit Tracker.
+Habit is a simple habit tracker for Linux, inspired by Loop Habit Tracker. Check off your habits each day and see how consistent you are, with no accounts and no cloud.
 
-Designed to feel right at home on GNOME, Habit helps you build good routines without distractions, accounts, or cloud sync. Your data stays entirely on your computer.
+## Features
 
-![Habit Icon](data/icons/hicolor/scalable/apps/io.github.habit.Habit.svg)
+- Check off habits for today and the last few days, marking each day as done, a rest day or missed.
+- Set rest days so planned breaks do not hurt your progress.
+- Track goals with numbers, such as glasses of water or pages read.
+- See your progress as a score, a 30-day curve and a calendar of past days.
+- Fix days you forgot to log in the history editor.
+- Pick a color for each habit.
+- Create a backup file and restore it any time.
 
----
+## Install
 
-## Why Habit?
-
-- **Smart habit scoring:** Reflects how consistent you've actually been over time, rather than just counting a raw streak.
-- **Built-in rest days:** Taking a scheduled break (like rest days between workouts) won't break your streak or hurt your score.
-- **Clear goal tracking:** For habits with target numbers (like drinking 8 glasses of water or reading 30 pages), you either hit your daily goal or you don't—no half-credit confusion.
-- **Clean and distraction-free:** Simple, color-coded symbols (`✓` done, `—` rest day, `✕` missed). No circular buttons, badges, or flashy animations.
-- **Detailed history at a glance:** See your 30-day progress curve and browse a monthly calendar heatmap to see your consistency or fill in days you forgot to log.
-- **Personal colors:** Pick any color you like for each habit to make your list easy to scan.
-- **100% private & offline:** No accounts, no internet access, and no telemetry. You can easily back up your data to a single file anytime you want.
-
----
-
-## How to Run
-
-### Run directly with Cargo
+Install a `habit.flatpak` file:
 
 ```bash
-cargo run --features ui
+flatpak install --user habit.flatpak
 ```
 
-### Build & Package as Flatpak Bundle (`habit.flatpak`)
+Then open Habit from your app grid. Habit needs a Wayland session, which is the default on current GNOME.
 
-```bash
-# 1. Build the Flatpak into a local repo
-flatpak-builder --force-clean --repo=repo build-dir build-aux/io.github.habit.Habit.json
+## Your data
 
-# 2. Export into a standalone habit.flatpak bundle
-flatpak build-bundle repo habit.flatpak io.github.habit.Habit
+Everything stays on your computer. To save a copy or move to another machine, open the menu and choose "Create Backup" or "Restore Backup".
 
-# 3. Install and run the bundle
-flatpak install --user -y --reinstall habit.flatpak
-flatpak run io.github.habit.Habit
-```
+When installed as a Flatpak, your data folder is `~/.var/app/io.github.habit.Habit/data/habit/` (`$XDG_DATA_HOME/habit/`). Outside Flatpak, it is `~/.local/share/habit/`.
 
-### Install directly as Flatpak (Development)
+## Building from source
 
-```bash
-flatpak-builder --user --install --force-clean build-dir build-aux/io.github.habit.Habit.json
-flatpak run io.github.habit.Habit
-```
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test and package Habit from source.
 
 ## License
 
-Free and open-source under the [GPL-3.0 License](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE).

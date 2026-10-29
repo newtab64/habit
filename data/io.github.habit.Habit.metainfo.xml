@@ -4,16 +4,25 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Habit</name>
-  <summary>Track habits with exponential decay scoring and pre-defined rest days</summary>
+  <summary>Track your daily habits</summary>
   <description>
-    <p>
-      Habit is a native, privacy-first Linux habit tracker designed for GNOME.
-      It features Loop-style exponential moving average decay scoring, pre-defined
-      rest days, an intuitive 50/50 responsive split view, and local-only SQLite storage.
-    </p>
+    <p>Habit helps you build routines and stay consistent. Check off your habits each
+    day, see how you are doing over time, and keep going.</p>
+    <p>Everything stays on your computer. There are no accounts, no internet access
+    and no tracking.</p>
+    <ul>
+      <li>Check off habits for today and the last few days</li>
+      <li>Set rest days so planned breaks do not hurt your progress</li>
+      <li>Track goals with numbers, such as glasses of water or pages read</li>
+      <li>See your progress as a score, a curve and a calendar of past days</li>
+      <li>Fix days you forgot to log</li>
+      <li>Pick a color for each habit</li>
+      <li>Create a backup file and restore it any time</li>
+    </ul>
   </description>
   <launchable type="desktop-id">io.github.habit.Habit.desktop</launchable>
   <url type="homepage">https://github.com/newtab64/habit</url>
+  <url type="bugtracker">https://github.com/newtab64/habit/issues</url>
   <developer id="io.github.habit">
     <name>Habit Developers</name>
   </developer>
