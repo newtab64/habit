@@ -3,7 +3,7 @@ use chrono::Datelike;
 use super::geometry::Rect;
 
 /// Gap spacing between heatmap cells (in pixels).
-pub const HEATMAP_SPACING: f64 = 6.0;
+pub const HEATMAP_SPACING: f64 = 4.0;
 
 /// Layout metrics and geometry for the Loop Habit Tracker / GitHub commit style rolling heatmap.
 #[derive(Debug, Clone, PartialEq)]
