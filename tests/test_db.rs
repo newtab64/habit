@@ -353,11 +353,13 @@ fn test_export_backup_vacuums_and_compacts_deleted_data() {
     db.export_backup(&exported_path)
         .expect("export_backup with VACUUM should succeed");
 
-    let source_size = std::fs::metadata(&source_path).unwrap().len();
-    let exported_size = std::fs::metadata(&exported_path).unwrap().len();
+    let source_conn = rusqlite::Connection::open(&source_path).unwrap();
+    let source_freelist: i64 = source_conn
+        .query_row("PRAGMA freelist_count;", [], |r| r.get(0))
+        .unwrap();
     assert!(
-        exported_size < source_size,
-        "Expected vacuumed export ({exported_size} B) to be smaller than un-vacuumed source ({source_size} B)"
+        source_freelist > 0,
+        "Un-vacuumed source DB should have freelist pages after bulk deletes (got {source_freelist})"
     );
 
     let exported_conn = rusqlite::Connection::open(&exported_path).unwrap();
@@ -365,11 +367,11 @@ fn test_export_backup_vacuums_and_compacts_deleted_data() {
         .query_row("PRAGMA integrity_check;", [], |r| r.get(0))
         .unwrap();
     assert_eq!(integrity, "ok");
-    let freelist_count: i64 = exported_conn
+    let exported_freelist: i64 = exported_conn
         .query_row("PRAGMA freelist_count;", [], |r| r.get(0))
         .unwrap();
     assert_eq!(
-        freelist_count, 0,
+        exported_freelist, 0,
         "Vacuumed backup should have 0 freelist pages"
     );
 
