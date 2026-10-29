@@ -1,9 +1,6 @@
 pub mod common;
 use common::HabitTestExt;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use chrono::NaiveDate;
 use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_WORKDAYS,
@@ -323,6 +320,8 @@ fn test_generate_row_css_structure_and_styling() {
 #[cfg(feature = "ui")]
 #[test]
 fn test_css_parsing_cleanliness() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
     match gtk4::init() {
         Ok(()) => {
             println!("GTK initialized successfully!");

@@ -1,7 +1,5 @@
 //! Habit list sidebar component for the application window.
 
-#![cfg(feature = "ui")]
-
 use gtk4::prelude::*;
 use libadwaita::prelude::*;
 
@@ -26,11 +24,12 @@ pub struct SidebarWidgets {
     pub menu_btn: gtk4::MenuButton,
 }
 
-/// Constructs the habit list sidebar page and returns handles to its interactive widgets.
-#[must_use]
-pub fn build_sidebar() -> SidebarWidgets {
-    let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
+fn build_sidebar_header() -> (
+    libadwaita::HeaderBar,
+    gtk4::Button,
+    gtk4::Button,
+    gtk4::MenuButton,
+) {
     let sidebar_header = libadwaita::HeaderBar::new();
     let sidebar_title = libadwaita::WindowTitle::new("Habits", "");
     sidebar_header.set_title_widget(Some(&sidebar_title));
@@ -50,6 +49,15 @@ pub fn build_sidebar() -> SidebarWidgets {
     add_btn.add_css_class("flat");
     sidebar_header.pack_end(&add_btn);
 
+    (sidebar_header, lock_btn, add_btn, menu_btn)
+}
+
+/// Constructs the habit list sidebar page and returns handles to its interactive widgets.
+#[must_use]
+pub fn build_sidebar() -> SidebarWidgets {
+    let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+
+    let (sidebar_header, lock_btn, add_btn, menu_btn) = build_sidebar_header();
     sidebar_box.append(&sidebar_header);
 
     let sidebar_scrolled = gtk4::ScrolledWindow::new();
@@ -58,7 +66,6 @@ pub fn build_sidebar() -> SidebarWidgets {
 
     let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
 
-    // Quick-check column headers with compact gap 4
     let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
@@ -90,8 +97,7 @@ pub fn build_sidebar() -> SidebarWidgets {
     quick_check_header.append(&days_header_box);
     content_box.append(&quick_check_header);
 
-    let sep1 = gtk4::Separator::new(gtk4::Orientation::Horizontal);
-    content_box.append(&sep1);
+    content_box.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
 
     let habits_list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
     habits_list_box.set_margin_start(12);

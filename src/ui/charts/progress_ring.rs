@@ -1,11 +1,9 @@
-#[cfg(feature = "ui")]
 use super::geometry::Rgba;
 
 /// Renders a circular progress ring (e.g. for the Overview card).
 ///
 /// Draws a subtle background track ring and a rounded foreground progress arc
 /// starting from the 12 o'clock position (-PI/2) clockwise.
-#[cfg(feature = "ui")]
 pub fn draw_progress_ring(
     cr: &cairo::Context,
     width: f64,

@@ -1,6 +1,4 @@
 use super::geometry::Point;
-#[cfg(feature = "ui")]
-use super::geometry::Rgba;
 
 /// Computes drawing points for a habit strength curve.
 ///
@@ -58,7 +56,7 @@ pub fn draw_strength_curve(
     width: f64,
     height: f64,
     data: &[f64],
-    color: &Rgba,
+    color: &super::geometry::Rgba,
 ) {
     if data.is_empty() || width <= 0.0 || height <= 0.0 {
         return;

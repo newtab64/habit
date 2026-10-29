@@ -1,12 +1,6 @@
 use chrono::Datelike;
 
-#[cfg(feature = "ui")]
-use super::geometry::draw_rounded_rect;
 use super::geometry::Rect;
-#[cfg(feature = "ui")]
-use super::geometry::Rgba;
-#[cfg(feature = "ui")]
-use crate::engine::models::EntryStatus;
 
 /// Gap spacing between heatmap cells (in pixels).
 pub const HEATMAP_SPACING: f64 = 6.0;
@@ -159,9 +153,11 @@ pub fn draw_loop_heatmap<S: std::hash::BuildHasher>(
     height: f64,
     today: chrono::NaiveDate,
     week_offset: usize,
-    entries: &std::collections::HashMap<chrono::NaiveDate, EntryStatus, S>,
-    color: &Rgba,
+    entries: &std::collections::HashMap<chrono::NaiveDate, crate::engine::models::EntryStatus, S>,
+    color: &super::geometry::Rgba,
 ) {
+    use super::geometry::{draw_rounded_rect, Rgba};
+    use crate::engine::models::EntryStatus;
     if width <= 0.0 || height <= 0.0 {
         return;
     }

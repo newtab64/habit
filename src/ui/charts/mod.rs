@@ -1,6 +1,7 @@
 pub mod curve;
 pub mod geometry;
 pub mod heatmap;
+#[cfg(feature = "ui")]
 pub mod progress_ring;
 
 pub use curve::calculate_curve_points;

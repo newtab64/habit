@@ -1,28 +1,14 @@
-use chrono::NaiveDate;
-
-#[cfg(feature = "ui")]
 use std::path::PathBuf;
-#[cfg(feature = "ui")]
 use std::rc::Rc;
 
-#[cfg(feature = "ui")]
 use gtk4::prelude::*;
-#[cfg(feature = "ui")]
 use libadwaita::prelude::*;
 
-#[cfg(feature = "ui")]
 use crate::engine::db::Database;
 
-/// Generates the default backup filename based on the specified date.
-///
-/// Format: `habit-backup-YYYY-MM-DD.db` (e.g. `habit-backup-2026-10-26.db`).
-#[must_use]
-pub fn default_backup_filename(date: NaiveDate) -> String {
-    format!("habit-backup-{}.db", date.format("%Y-%m-%d"))
-}
+use super::default_backup_filename;
 
 /// Outcome of a database import or export dialog operation.
-#[cfg(feature = "ui")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportOutcome {
     /// Operation completed successfully at the selected path.
@@ -33,28 +19,30 @@ pub enum ImportOutcome {
     Failed(String),
 }
 
-#[cfg(feature = "ui")]
 fn is_dialog_cancelled(err: &gtk4::glib::Error) -> bool {
     err.matches(gtk4::DialogError::Dismissed)
         || err.matches(gtk4::DialogError::Cancelled)
         || err.matches(gtk4::gio::IOErrorEnum::Cancelled)
 }
 
-/// Prompts the user via XDG `FileDialog` to select a destination path, then exports
-/// an atomic SQLite backup of the database to that path.
-#[cfg(feature = "ui")]
-pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
-    parent: &W,
-    db: Rc<Database>,
-    on_complete: impl Fn(ImportOutcome) + 'static,
-) {
+fn sqlite_file_filters() -> (gtk4::FileFilter, gtk4::gio::ListStore) {
     let filter = gtk4::FileFilter::new();
     filter.set_name(Some("SQLite Database (*.db)"));
     filter.add_pattern("*.db");
 
     let filters = gtk4::gio::ListStore::new::<gtk4::FileFilter>();
     filters.append(&filter);
+    (filter, filters)
+}
 
+/// Prompts the user via XDG `FileDialog` to select a destination path, then exports
+/// an atomic SQLite backup of the database to that path.
+pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
+    parent: &W,
+    db: Rc<Database>,
+    on_complete: impl Fn(ImportOutcome) + 'static,
+) {
+    let (filter, filters) = sqlite_file_filters();
     let today = chrono::Local::now().date_naive();
     let initial_name = default_backup_filename(today);
 
@@ -93,20 +81,50 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
     );
 }
 
+fn confirm_and_restore<W: IsA<gtk4::Window>>(
+    parent: &W,
+    path: PathBuf,
+    db: &Rc<Database>,
+    on_complete: Rc<impl Fn(ImportOutcome) + 'static>,
+) {
+    let alert = libadwaita::AlertDialog::builder()
+        .heading("Restore Database Backup?")
+        .body("Restoring a backup will overwrite all current habits and history. This action cannot be undone.")
+        .build();
+    alert.add_response("cancel", "Cancel");
+    alert.add_response("restore", "Restore");
+    alert.set_response_appearance("restore", libadwaita::ResponseAppearance::Destructive);
+    alert.set_default_response(Some("cancel"));
+    alert.set_close_response("cancel");
+
+    let db_clone = Rc::clone(db);
+    alert.choose(
+        parent.as_ref().upcast_ref::<gtk4::Widget>(),
+        None::<&gtk4::gio::Cancellable>,
+        move |response| {
+            if response == "restore" {
+                let restore_res = db_clone.restore_backup(&path);
+                gtk4::glib::idle_add_local_once(move || match restore_res {
+                    Ok(()) => on_complete(ImportOutcome::Done(path)),
+                    Err(e) => on_complete(ImportOutcome::Failed(e.to_string())),
+                });
+            } else {
+                gtk4::glib::idle_add_local_once(move || {
+                    on_complete(ImportOutcome::Cancelled);
+                });
+            }
+        },
+    );
+}
+
 /// Prompts the user via XDG `FileDialog` to select a `.db` backup file, then restores
 /// the database from that file after verifying integrity and schema.
-#[cfg(feature = "ui")]
 pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
     db: Rc<Database>,
     on_complete: impl Fn(ImportOutcome) + 'static,
 ) {
-    let filter = gtk4::FileFilter::new();
-    filter.set_name(Some("SQLite Database (*.db)"));
-    filter.add_pattern("*.db");
-
-    let filters = gtk4::gio::ListStore::new::<gtk4::FileFilter>();
-    filters.append(&filter);
+    let (filter, filters) = sqlite_file_filters();
 
     let dialog = gtk4::FileDialog::builder()
         .title("Import Database Backup")
@@ -116,53 +134,25 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
         .build();
 
     let parent_clone = parent.clone();
+    let on_complete_rc = Rc::new(on_complete);
     dialog.open(
         Some(parent),
         None::<&gtk4::gio::Cancellable>,
         move |result| match result {
             Ok(file) => {
                 if let Some(path) = file.path() {
-                    let alert = libadwaita::AlertDialog::builder()
-                        .heading("Restore Database Backup?")
-                        .body("Restoring a backup will overwrite all current habits and history. This action cannot be undone.")
-                        .build();
-                    alert.add_response("cancel", "Cancel");
-                    alert.add_response("restore", "Restore");
-                    alert.set_response_appearance("restore", libadwaita::ResponseAppearance::Destructive);
-                    alert.set_default_response(Some("cancel"));
-                    alert.set_close_response("cancel");
-
-                    let db_clone = Rc::clone(&db);
-                    let on_complete_rc = Rc::new(on_complete);
-                    let on_complete_cb = Rc::clone(&on_complete_rc);
-                    alert.choose(
-                        parent_clone.as_ref().upcast_ref::<gtk4::Widget>(),
-                        None::<&gtk4::gio::Cancellable>,
-                        move |response| {
-                            if response == "restore" {
-                                let restore_res = db_clone.restore_backup(&path);
-                                gtk4::glib::idle_add_local_once(move || match restore_res {
-                                    Ok(()) => on_complete_cb(ImportOutcome::Done(path)),
-                                    Err(e) => on_complete_cb(ImportOutcome::Failed(e.to_string())),
-                                });
-                            } else {
-                                gtk4::glib::idle_add_local_once(move || {
-                                    on_complete_cb(ImportOutcome::Cancelled);
-                                });
-                            }
-                        },
-                    );
+                    confirm_and_restore(&parent_clone, path, &db, Rc::clone(&on_complete_rc));
                 } else {
-                    on_complete(ImportOutcome::Failed(
+                    on_complete_rc(ImportOutcome::Failed(
                         "Failed to resolve source file path".to_string(),
                     ));
                 }
             }
             Err(e) => {
                 if is_dialog_cancelled(&e) {
-                    on_complete(ImportOutcome::Cancelled);
+                    on_complete_rc(ImportOutcome::Cancelled);
                 } else {
-                    on_complete(ImportOutcome::Failed(e.to_string()));
+                    on_complete_rc(ImportOutcome::Failed(e.to_string()));
                 }
             }
         },

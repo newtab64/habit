@@ -208,6 +208,30 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
     provider.load_from_data(&full_css);
 }
 
+fn ordered_habits_for_render(
+    habits: &[Habit],
+    is_reorder: bool,
+    staged_order: &[i64],
+) -> Vec<Habit> {
+    if !is_reorder {
+        return habits.to_vec();
+    }
+    let mut list = Vec::with_capacity(habits.len());
+    for id in staged_order {
+        if let Some(h) = habits.iter().find(|h| h.id == Some(*id)) {
+            list.push(h.clone());
+        }
+    }
+    for h in habits {
+        if let Some(id) = h.id {
+            if !staged_order.contains(&id) {
+                list.push(h.clone());
+            }
+        }
+    }
+    list
+}
+
 fn rebuild_habit_list(
     inner_rc: &Rc<RefCell<WindowInner>>,
     inner: &WindowInner,
@@ -245,32 +269,14 @@ fn rebuild_habit_list(
     }));
     inner.add_btn.set_sensitive(!is_reorder);
 
-    let ordered_habits: Vec<Habit> = if is_reorder {
-        let staged = caches.staged_habit_order.borrow().clone();
-        let mut list = Vec::with_capacity(habits.len());
-        for id in &staged {
-            if let Some(h) = habits.iter().find(|h| h.id == Some(*id)) {
-                list.push(h.clone());
-            }
-        }
-        for h in habits {
-            if let Some(id) = h.id {
-                if !staged.contains(&id) {
-                    list.push(h.clone());
-                }
-            }
-        }
-        list
-    } else {
-        habits.to_vec()
-    };
+    let ordered_habits =
+        ordered_habits_for_render(habits, is_reorder, &caches.staged_habit_order.borrow());
 
     for habit in &ordered_habits {
         let Some(habit_id) = habit.id else { continue };
-        let start_bound = NaiveDate::MIN;
         let entries = inner
             .db
-            .get_entries(habit_id, start_bound, today)
+            .get_entries(habit_id, NaiveDate::MIN, today)
             .unwrap_or_default();
         let score = calculate_habit_score(habit, &entries, today);
 

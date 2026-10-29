@@ -1,26 +1,17 @@
 //! History editor bottom sheet overlay for viewing and modifying habit completion history.
 
-#[cfg(feature = "ui")]
 use std::cell::RefCell;
-#[cfg(feature = "ui")]
 use std::collections::HashMap;
-#[cfg(feature = "ui")]
 use std::rc::Rc;
 
-#[cfg(feature = "ui")]
 use chrono::Datelike;
-#[cfg(feature = "ui")]
 use gtk4::prelude::*;
 
-#[cfg(feature = "ui")]
 use crate::engine::models::EntryStatus;
-#[cfg(feature = "ui")]
 use crate::ui::charts::{draw_loop_heatmap, loop_heatmap_hit_test};
-#[cfg(feature = "ui")]
 use crate::ui::state::{refresh, DrawCaches, WindowInner};
 
 /// Widgets comprising the history editor bottom sheet overlay.
-#[cfg(feature = "ui")]
 #[derive(Clone)]
 pub struct HistoryEditorWidgets {
     /// Outer container overlaying the details view with a dimming backdrop.
@@ -38,10 +29,6 @@ pub struct HistoryEditorWidgets {
 }
 
 /// Builds the history editor bottom sheet overlay widgets.
-///
-/// Configures a dimming backdrop, a bottom sheet with an 180ms slide-up transition,
-/// a header with title and close button, and a 280px high drawing area for the heatmap.
-#[cfg(feature = "ui")]
 #[must_use]
 pub fn build_history_editor() -> HistoryEditorWidgets {
     let editor_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -118,12 +105,8 @@ pub fn build_history_editor() -> HistoryEditorWidgets {
     }
 }
 
-#[cfg(feature = "ui")]
 impl HistoryEditorWidgets {
     /// Opens the history editor bottom sheet for the currently selected habit.
-    ///
-    /// Reads the selected habit and past entries from the database, initializes the
-    /// editor caches, updates the title, and reveals the sheet overlay.
     pub fn open(&self, inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
         let (habit_opt, initial_entries) = {
             let inner = inner_rc.borrow();
@@ -207,7 +190,6 @@ impl HistoryEditorWidgets {
         caches: &DrawCaches,
         root_window: &gtk4::Window,
     ) {
-        // Close button click
         let editor_close = self.clone();
         let inner_close = Rc::clone(inner_rc);
         let caches_close = caches.clone();
@@ -215,7 +197,6 @@ impl HistoryEditorWidgets {
             editor_close.close(&inner_close, &caches_close);
         });
 
-        // Dimming backdrop tap
         let editor_dim = self.clone();
         let inner_dim = Rc::clone(inner_rc);
         let caches_dim = caches.clone();
@@ -225,7 +206,6 @@ impl HistoryEditorWidgets {
         });
         self.dimming.add_controller(dimming_gesture);
 
-        // Scroll gesture on drawing area
         let scroll = gtk4::EventControllerScroll::new(
             gtk4::EventControllerScrollFlags::VERTICAL
                 | gtk4::EventControllerScrollFlags::HORIZONTAL,
@@ -245,7 +225,28 @@ impl HistoryEditorWidgets {
         });
         self.drawing_area.add_controller(scroll);
 
-        // Tap/click hit test gesture on drawing area
+        self.connect_hit_test_controller(inner_rc, caches);
+
+        let key_controller = gtk4::EventControllerKey::new();
+        let editor_esc = self.clone();
+        let inner_esc = Rc::clone(inner_rc);
+        let caches_esc = caches.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gtk4::gdk::Key::Escape && editor_esc.container.is_visible() {
+                editor_esc.close(&inner_esc, &caches_esc);
+                gtk4::glib::Propagation::Stop
+            } else {
+                gtk4::glib::Propagation::Proceed
+            }
+        });
+        root_window.add_controller(key_controller);
+    }
+
+    fn connect_hit_test_controller(
+        &self,
+        inner_rc: &Rc<RefCell<WindowInner>>,
+        caches: &DrawCaches,
+    ) {
         let click_gesture = gtk4::GestureClick::new();
         let offset_click = Rc::clone(&caches.editor_week_offset);
         let entries_click = Rc::clone(&caches.editor_entries);
@@ -259,8 +260,7 @@ impl HistoryEditorWidgets {
             };
             let habit = {
                 let inner = inner_click.borrow();
-                let db = &inner.db;
-                db.get_habit(habit_id).ok().flatten()
+                inner.db.get_habit(habit_id).ok().flatten()
             };
             let Some(habit) = habit else { return };
 
@@ -282,25 +282,9 @@ impl HistoryEditorWidgets {
             }
         });
         self.drawing_area.add_controller(click_gesture);
-
-        // Escape key controller on root window
-        let key_controller = gtk4::EventControllerKey::new();
-        let editor_esc = self.clone();
-        let inner_esc = Rc::clone(inner_rc);
-        let caches_esc = caches.clone();
-        key_controller.connect_key_pressed(move |_, key, _, _| {
-            if key == gtk4::gdk::Key::Escape && editor_esc.container.is_visible() {
-                editor_esc.close(&inner_esc, &caches_esc);
-                gtk4::glib::Propagation::Stop
-            } else {
-                gtk4::glib::Propagation::Proceed
-            }
-        });
-        root_window.add_controller(key_controller);
     }
 }
 
-#[cfg(feature = "ui")]
 fn handle_history_click(
     habit: &crate::engine::models::Habit,
     clicked_date: chrono::NaiveDate,

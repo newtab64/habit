@@ -1,31 +1,18 @@
-pub use crate::ui::metrics::*;
-
-#[cfg(feature = "ui")]
 use std::cell::RefCell;
-#[cfg(feature = "ui")]
 use std::rc::Rc;
 
-#[cfg(feature = "ui")]
 use gtk4::prelude::*;
-#[cfg(feature = "ui")]
 use libadwaita::prelude::*;
 
-#[cfg(feature = "ui")]
 use crate::engine::db::Database;
-#[cfg(feature = "ui")]
 use crate::ui::details::{
     build_details, connect_detail_actions, connect_drawing_areas, DetailsWidgets,
 };
-#[cfg(feature = "ui")]
 use crate::ui::habit_dialog::show_habit_dialog;
-#[cfg(feature = "ui")]
 use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog, ImportOutcome};
-#[cfg(feature = "ui")]
 use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
-#[cfg(feature = "ui")]
 use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
 
-#[cfg(feature = "ui")]
 fn connect_lock_button(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
@@ -70,8 +57,6 @@ fn connect_lock_button(
     });
 }
 
-/// Connects user interface controllers, including the add habit dialog and detail view actions.
-#[cfg(feature = "ui")]
 fn connect_controllers(
     inner_rc: &Rc<RefCell<WindowInner>>,
     caches: &DrawCaches,
@@ -112,23 +97,12 @@ fn connect_controllers(
     connect_detail_actions(inner_rc, caches, root_window, root_overlay, details);
 }
 
-/// Configures the primary window menu with backup export, import, and about actions.
-#[cfg(feature = "ui")]
-fn setup_primary_menu(
+fn register_export_action(
     window: &libadwaita::ApplicationWindow,
     root_window: &gtk4::Window,
     inner_rc: &Rc<RefCell<WindowInner>>,
-    caches: &DrawCaches,
-    menu_btn: &gtk4::MenuButton,
     toast_overlay: &libadwaita::ToastOverlay,
 ) {
-    let menu_model = gtk4::gio::Menu::new();
-    menu_model.append(Some("Export Backup..."), Some("win.export-backup"));
-    menu_model.append(Some("Import Backup..."), Some("win.import-backup"));
-    menu_model.append(Some("About Habit"), Some("win.about"));
-    menu_btn.set_menu_model(Some(&menu_model));
-
-    // Export action
     let action_export = gtk4::gio::SimpleAction::new("export-backup", None);
     let inner_exp = Rc::clone(inner_rc);
     let root_exp = root_window.clone();
@@ -156,8 +130,15 @@ fn setup_primary_menu(
         });
     });
     window.add_action(&action_export);
+}
 
-    // Import action
+fn register_import_action(
+    window: &libadwaita::ApplicationWindow,
+    root_window: &gtk4::Window,
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    toast_overlay: &libadwaita::ToastOverlay,
+) {
     let action_import = gtk4::gio::SimpleAction::new("import-backup", None);
     let inner_imp = Rc::clone(inner_rc);
     let caches_imp = caches.clone();
@@ -189,8 +170,25 @@ fn setup_primary_menu(
         });
     });
     window.add_action(&action_import);
+}
 
-    // About action
+fn setup_primary_menu(
+    window: &libadwaita::ApplicationWindow,
+    root_window: &gtk4::Window,
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    caches: &DrawCaches,
+    menu_btn: &gtk4::MenuButton,
+    toast_overlay: &libadwaita::ToastOverlay,
+) {
+    let menu_model = gtk4::gio::Menu::new();
+    menu_model.append(Some("Export Backup..."), Some("win.export-backup"));
+    menu_model.append(Some("Import Backup..."), Some("win.import-backup"));
+    menu_model.append(Some("About Habit"), Some("win.about"));
+    menu_btn.set_menu_model(Some(&menu_model));
+
+    register_export_action(window, root_window, inner_rc, toast_overlay);
+    register_import_action(window, root_window, inner_rc, caches, toast_overlay);
+
     let action_about = gtk4::gio::SimpleAction::new("about", None);
     let root_about = root_window.clone();
     action_about.connect_activate(move |_, _| {
@@ -209,8 +207,58 @@ fn setup_primary_menu(
     window.add_action(&action_about);
 }
 
+fn create_window_inner(
+    nav_view: &libadwaita::NavigationView,
+    toast_overlay: &libadwaita::ToastOverlay,
+    db: Database,
+    sidebar: SidebarWidgets,
+    details: DetailsWidgets,
+) -> (WindowInner, gtk4::Button, gtk4::Button, gtk4::MenuButton) {
+    let habit_css_provider = gtk4::CssProvider::new();
+    if let Some(display) = gtk4::gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &habit_css_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
+    let lock_btn = sidebar.lock_btn.clone();
+    let add_btn = sidebar.add_btn.clone();
+    let menu_btn = sidebar.menu_btn;
+
+    let inner = WindowInner {
+        nav_view: nav_view.clone(),
+        details_page: details.page,
+        toast_overlay: toast_overlay.clone(),
+        db: Rc::new(db),
+        selected_habit_id: None,
+        lock_btn: sidebar.lock_btn,
+        add_btn: sidebar.add_btn,
+        habits_list_box: sidebar.habits_list_box,
+        habit_score_label: sidebar.habit_score_label,
+        header_day_labels: sidebar.header_day_labels,
+        habit_css_provider,
+        title_label: details.title_label,
+        schedule_label: details.schedule_label,
+        target_label: details.target_label,
+        edit_btn: details.edit_btn,
+        delete_btn: details.delete_btn,
+        ring_drawing_area: details.ring_drawing_area,
+        score_card_value: details.score_card_value,
+        month_diff_card_value: details.month_diff_card_value,
+        year_diff_card_value: details.year_diff_card_value,
+        total_count_card_value: details.total_count_card_value,
+        curve_drawing_area: details.curve_drawing_area,
+        today_week_btn: details.today_week_btn,
+        next_week_btn: details.next_week_btn,
+        heatmap_drawing_area: details.heatmap_drawing_area,
+    };
+
+    (inner, lock_btn, add_btn, menu_btn)
+}
+
 /// Main application window providing Fast-Check List and push-navigation for details.
-#[cfg(feature = "ui")]
 #[derive(Debug, Clone)]
 pub struct HabitWindow {
     window: libadwaita::ApplicationWindow,
@@ -218,13 +266,8 @@ pub struct HabitWindow {
     toast_overlay: libadwaita::ToastOverlay,
 }
 
-#[cfg(feature = "ui")]
 impl HabitWindow {
     /// Opens the application window using the default on-disk SQLite database path.
-    ///
-    /// If opening the database fails, presents an alert dialog to the user displaying the
-    /// database path and error message, prompting the user to either quit or explicitly
-    /// opt into a temporary in-memory database where changes will not be saved.
     ///
     /// # Panics
     /// Panics if opening an in-memory database fallback fails.
@@ -308,51 +351,12 @@ impl HabitWindow {
         root_overlay.set_child(Some(&toast_overlay));
         window.set_content(Some(&root_overlay));
 
-        let now = chrono::Local::now();
-        let today = now.date_naive();
-
+        let today = chrono::Local::now().date_naive();
         let caches = DrawCaches::new(today);
-
         connect_drawing_areas(&details, &caches);
 
-        let habit_css_provider = gtk4::CssProvider::new();
-        if let Some(display) = gtk4::gdk::Display::default() {
-            gtk4::style_context_add_provider_for_display(
-                &display,
-                &habit_css_provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
-            );
-        }
-
-        let db_rc = Rc::new(db);
-        let inner = WindowInner {
-            nav_view: nav_view.clone(),
-            details_page: details.page.clone(),
-            toast_overlay: toast_overlay.clone(),
-            db: Rc::clone(&db_rc),
-            selected_habit_id: None,
-            lock_btn: sidebar.lock_btn.clone(),
-            add_btn: sidebar.add_btn.clone(),
-            habits_list_box: sidebar.habits_list_box,
-            habit_score_label: sidebar.habit_score_label,
-            header_day_labels: sidebar.header_day_labels,
-            habit_css_provider,
-            title_label: details.title_label,
-            schedule_label: details.schedule_label,
-            target_label: details.target_label,
-            edit_btn: details.edit_btn.clone(),
-            delete_btn: details.delete_btn.clone(),
-            ring_drawing_area: details.ring_drawing_area,
-            score_card_value: details.score_card_value,
-            month_diff_card_value: details.month_diff_card_value,
-            year_diff_card_value: details.year_diff_card_value,
-            total_count_card_value: details.total_count_card_value,
-            curve_drawing_area: details.curve_drawing_area,
-            today_week_btn: details.today_week_btn,
-            next_week_btn: details.next_week_btn,
-            heatmap_drawing_area: details.heatmap_drawing_area,
-        };
-
+        let (inner, lock_btn, add_btn, menu_btn) =
+            create_window_inner(&nav_view, &toast_overlay, db, sidebar, details);
         let inner_rc = Rc::new(RefCell::new(inner));
         let root_window: gtk4::Window = window.clone().upcast();
 
@@ -362,8 +366,8 @@ impl HabitWindow {
             &root_window,
             &root_overlay,
             &details_clone,
-            &sidebar.lock_btn,
-            &sidebar.add_btn,
+            &lock_btn,
+            &add_btn,
         );
 
         setup_primary_menu(
@@ -371,11 +375,10 @@ impl HabitWindow {
             &root_window,
             &inner_rc,
             &caches,
-            &sidebar.menu_btn,
+            &menu_btn,
             &toast_overlay,
         );
 
-        // Initial populate and render
         refresh(&inner_rc, &caches);
 
         Self {
@@ -409,7 +412,6 @@ impl HabitWindow {
     }
 }
 
-#[cfg(feature = "ui")]
 impl std::ops::Deref for HabitWindow {
     type Target = libadwaita::ApplicationWindow;
 
@@ -418,14 +420,12 @@ impl std::ops::Deref for HabitWindow {
     }
 }
 
-#[cfg(feature = "ui")]
 impl AsRef<gtk4::Widget> for HabitWindow {
     fn as_ref(&self) -> &gtk4::Widget {
         self.window.upcast_ref()
     }
 }
 
-#[cfg(feature = "ui")]
 fn acquire_instance_lock() -> Option<std::fs::File> {
     let lock_path = default_database_path().with_file_name("habit.lock");
     if let Some(parent) = lock_path.parent() {
@@ -445,9 +445,7 @@ fn acquire_instance_lock() -> Option<std::fs::File> {
 ///
 /// Configured to run exclusively on Wayland sessions with no X11/Xorg fallback,
 /// and enforces a strict single-instance lock so only one window can ever run.
-#[cfg(feature = "ui")]
 pub fn run_app() {
-    // Enforce Wayland session only; prevent X11/Xorg fallback
     std::env::set_var("GDK_BACKEND", "wayland");
 
     let app = libadwaita::Application::builder()
