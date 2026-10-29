@@ -47,8 +47,8 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
     let initial_name = default_backup_filename(today);
 
     let dialog = gtk4::FileDialog::builder()
-        .title("Export Database Backup")
-        .accept_label("Export")
+        .title("Create Database Backup")
+        .accept_label("Save")
         .default_filter(&filter)
         .filters(&filters)
         .initial_name(&initial_name)

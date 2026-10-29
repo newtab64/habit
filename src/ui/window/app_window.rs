@@ -126,13 +126,11 @@ fn register_export_action(
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("backup.db");
-                toast.add_toast(libadwaita::Toast::new(&format!(
-                    "Backup exported to {name}"
-                )));
+                toast.add_toast(libadwaita::Toast::new(&format!("Backup saved to {name}")));
             }
             DialogOutcome::Cancelled => {}
             DialogOutcome::Failed(err) => {
-                toast.add_toast(libadwaita::Toast::new(&format!("Export failed: {err}")));
+                toast.add_toast(libadwaita::Toast::new(&format!("Backup failed: {err}")));
             }
         });
     });
@@ -189,8 +187,8 @@ fn setup_primary_menu(
     toast_overlay: &libadwaita::ToastOverlay,
 ) {
     let menu_model = gtk4::gio::Menu::new();
-    menu_model.append(Some("Export Data"), Some("win.export-backup"));
-    menu_model.append(Some("Restore Data"), Some("win.import-backup"));
+    menu_model.append(Some("Create Backup"), Some("win.export-backup"));
+    menu_model.append(Some("Restore Backup"), Some("win.import-backup"));
     menu_model.append(Some("About Habit"), Some("win.about"));
     menu_btn.set_menu_model(Some(&menu_model));
 
