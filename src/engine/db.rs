@@ -438,7 +438,7 @@ impl Database {
             backup.run_to_completion(100, std::time::Duration::from_millis(0), None)?;
             drop(backup);
             drop(conn);
-            let _ = dst_conn.execute_batch("PRAGMA vacuum;");
+            dst_conn.execute_batch("VACUUM;")?;
         }
 
         remove_sqlite_files(target_path);

@@ -319,3 +319,59 @@ fn test_reorder_habits_and_sort_order() {
         .collect();
     assert_eq!(reordered, vec![h3, h1, h2]);
 }
+
+#[test]
+fn test_export_backup_vacuums_and_compacts_deleted_data() {
+    let temp_dir = std::env::temp_dir().join(format!("habit_vacuum_test_{}", std::process::id()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let source_path = temp_dir.join("source.db");
+    let exported_path = temp_dir.join("exported.db");
+
+    let db = Database::open(&source_path).expect("open source db");
+    let mut ids = Vec::new();
+    let base_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    for i in 0..50 {
+        let h = Habit::new_binary(format!("Habit {i} with long padding name {i:064}"));
+        let hid = db.create_habit(&h).unwrap();
+        ids.push(hid);
+        for d in 0..30 {
+            db.log_entry(
+                hid,
+                base_date + chrono::Duration::days(d),
+                EntryStatus::Completed,
+                1.0,
+            )
+            .unwrap();
+        }
+    }
+
+    // Delete most habits so free pages accumulate in the source DB
+    for &hid in &ids[1..] {
+        db.delete_habit(hid).unwrap();
+    }
+
+    db.export_backup(&exported_path)
+        .expect("export_backup with VACUUM should succeed");
+
+    let source_size = std::fs::metadata(&source_path).unwrap().len();
+    let exported_size = std::fs::metadata(&exported_path).unwrap().len();
+    assert!(
+        exported_size < source_size,
+        "Expected vacuumed export ({exported_size} B) to be smaller than un-vacuumed source ({source_size} B)"
+    );
+
+    let exported_conn = rusqlite::Connection::open(&exported_path).unwrap();
+    let integrity: String = exported_conn
+        .query_row("PRAGMA integrity_check;", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    let freelist_count: i64 = exported_conn
+        .query_row("PRAGMA freelist_count;", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        freelist_count, 0,
+        "Vacuumed backup should have 0 freelist pages"
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
