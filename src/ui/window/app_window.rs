@@ -11,7 +11,7 @@ use crate::ui::details::{
 use crate::ui::habit_dialog::show_habit_dialog;
 use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog, DialogOutcome};
 use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
-use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
+use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner, BASE_CSS};
 
 fn connect_lock_button(
     inner_rc: &Rc<RefCell<WindowInner>>,
@@ -216,6 +216,13 @@ fn create_window_inner(
 ) -> (WindowInner, gtk4::Button, gtk4::Button, gtk4::MenuButton) {
     let habit_css_provider = gtk4::CssProvider::new();
     if let Some(display) = gtk4::gdk::Display::default() {
+        let base_css_provider = gtk4::CssProvider::new();
+        base_css_provider.load_from_data(BASE_CSS);
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &base_css_provider,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
         gtk4::style_context_add_provider_for_display(
             &display,
             &habit_css_provider,

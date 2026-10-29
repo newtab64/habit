@@ -170,23 +170,25 @@ fn update_header_dates(labels: &[gtk4::Label], today: NaiveDate) {
     }
 }
 
+/// Static application stylesheet loaded once at startup.
+pub const BASE_CSS: &str = "\
+.habit-title {\n  font-weight: 700;\n  padding: 0;\n  line-height: 1;\n}\n\
+.day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n  padding: 0;\n  line-height: 1;\n}\n\
+.dragging-row {\n  background-color: rgba(53, 132, 228, 0.18);\n  border-radius: 8px;\n}\n\
+.loop-popup-box {\n  min-width: 200px;\n}\n\
+.loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
+.loop-popup-btn.muted {\n  color: #888888;\n}\n\
+.editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
+.editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  border: 1px solid rgba(0, 0, 0, 0.12);\n  border-bottom: none;\n  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n}\n\
+button.quick-preset-btn {\n  font-size: 13px;\n  font-weight: 600;\n  padding-left: 10px;\n  padding-right: 10px;\n  padding-top: 4px;\n  padding-bottom: 4px;\n  min-height: 28px;\n  border-radius: 8px;\n}\n\
+button.destructive-action.flat,\n\
+button.destructive-action.flat image {\n  color: #e01b24;\n}\n";
+
 fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id: Option<i64>) {
-    let mut full_css = String::from(
-        ".habit-title {\n  font-weight: 700;\n  padding: 0;\n  line-height: 1;\n}\n\
-         .day-symbol {\n  font-size: 20px;\n  font-weight: bold;\n  padding: 0;\n  line-height: 1;\n}\n\
-         .dragging-row {\n  background-color: rgba(53, 132, 228, 0.18);\n  border-radius: 8px;\n}\n\
-         .loop-popup-box {\n  min-width: 200px;\n}\n\
-         .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
-         .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-         .editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
-         .editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  border: 1px solid rgba(0, 0, 0, 0.12);\n  border-bottom: none;\n  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n}\n\
-         button.quick-preset-btn {\n  font-size: 13px;\n  font-weight: 600;\n  padding-left: 10px;\n  padding-right: 10px;\n  padding-top: 4px;\n  padding-bottom: 4px;\n  min-height: 28px;\n  border-radius: 8px;\n}\n\
-         button.destructive-action.flat,\n\
-         button.destructive-action.flat image {\n  color: #e01b24;\n}\n",
-    );
+    let mut dynamic_css = String::new();
     for h in habits {
         if let Some(hid) = h.id {
-            full_css.push_str(&crate::ui::habit_row::generate_row_css(
+            dynamic_css.push_str(&crate::ui::habit_row::generate_row_css(
                 hid,
                 &h.accent_color,
             ));
@@ -200,12 +202,12 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
                 format!("#{}", selected_habit.accent_color)
             };
             let _ = write!(
-                full_css,
+                dynamic_css,
                 ".overview-accent {{\n  color: {color};\n  font-weight: 700;\n}}\n"
             );
         }
     }
-    provider.load_from_data(&full_css);
+    provider.load_from_data(&dynamic_css);
 }
 
 fn ordered_habits_for_render(
@@ -371,6 +373,16 @@ fn update_charts(
     inner.heatmap_drawing_area.queue_draw();
 }
 
+fn set_diff_style(label: &gtk4::Label, value: f64) {
+    if value >= 0.0 {
+        label.add_css_class("overview-accent");
+        label.remove_css_class("dim-label");
+    } else {
+        label.remove_css_class("overview-accent");
+        label.add_css_class("dim-label");
+    }
+}
+
 fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, today: NaiveDate) {
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
@@ -403,25 +415,8 @@ fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, to
                 .total_count_card_value
                 .set_text(&metrics.total_count_text);
 
-            if metrics.month_diff >= 0.0 {
-                inner.month_diff_card_value.add_css_class("overview-accent");
-                inner.month_diff_card_value.remove_css_class("dim-label");
-            } else {
-                inner
-                    .month_diff_card_value
-                    .remove_css_class("overview-accent");
-                inner.month_diff_card_value.add_css_class("dim-label");
-            }
-
-            if metrics.year_diff >= 0.0 {
-                inner.year_diff_card_value.add_css_class("overview-accent");
-                inner.year_diff_card_value.remove_css_class("dim-label");
-            } else {
-                inner
-                    .year_diff_card_value
-                    .remove_css_class("overview-accent");
-                inner.year_diff_card_value.add_css_class("dim-label");
-            }
+            set_diff_style(&inner.month_diff_card_value, metrics.month_diff);
+            set_diff_style(&inner.year_diff_card_value, metrics.year_diff);
 
             update_charts(inner, selected_habit, &all_entries, &metrics, caches, today);
             return;
