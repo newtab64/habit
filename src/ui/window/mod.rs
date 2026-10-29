@@ -1,5 +1,3 @@
-pub use crate::ui::metrics::*;
-
 #[cfg(feature = "ui")]
 mod app_window;
 #[cfg(feature = "ui")]

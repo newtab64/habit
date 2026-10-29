@@ -6,7 +6,7 @@ use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON,
     SCHEDULE_SAT, SCHEDULE_WED, SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
-use habit::ui::window::{
+use habit::ui::metrics::{
     calculate_habit_metrics, format_percentage_diff, format_schedule_summary,
     format_score_percentage, format_streak_badge, format_target_summary, toggle_entry_state,
 };

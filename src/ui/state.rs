@@ -5,6 +5,7 @@ use crate::ui::charts::{Rgba, DEFAULT_ACCENT};
 use crate::ui::habit_row::HabitRowWidget;
 use crate::ui::metrics::{
     calculate_habit_metrics, format_schedule_summary, format_target_summary, toggle_entry_state,
+    HabitMetrics,
 };
 use chrono::{Datelike, NaiveDate};
 use gtk4::prelude::*;
@@ -160,7 +161,6 @@ pub fn handle_select(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches, h
     }
 }
 
-/// Refreshes the UI state, habits list, metrics, charts, and heatmaps.
 fn update_header_dates(labels: &[gtk4::Label], today: NaiveDate) {
     let dates = crate::ui::habit_row::calculate_quick_check_dates(today);
     for (i, d) in dates.iter().enumerate() {
@@ -321,7 +321,7 @@ fn update_charts(
     inner: &WindowInner,
     selected_habit: &Habit,
     all_entries: &[HabitEntry],
-    metrics: &crate::ui::window::HabitMetrics,
+    metrics: &HabitMetrics,
     caches: &DrawCaches,
     today: NaiveDate,
 ) {

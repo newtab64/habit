@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 #[cfg(feature = "ui")]
 mod dialogs;
 #[cfg(feature = "ui")]
-pub use dialogs::{trigger_export_dialog, trigger_import_dialog, ImportOutcome};
+pub use dialogs::{trigger_export_dialog, trigger_import_dialog, DialogOutcome};
 
 /// Generates the default backup filename based on the specified date.
 ///

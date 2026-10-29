@@ -10,7 +10,7 @@ use super::default_backup_filename;
 
 /// Outcome of a database import or export dialog operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ImportOutcome {
+pub enum DialogOutcome {
     /// Operation completed successfully at the selected path.
     Done(PathBuf),
     /// The user dismissed the file chooser or cancelled the confirmation dialog.
@@ -40,7 +40,7 @@ fn sqlite_file_filters() -> (gtk4::FileFilter, gtk4::gio::ListStore) {
 pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
     db: Rc<Database>,
-    on_complete: impl Fn(ImportOutcome) + 'static,
+    on_complete: impl Fn(DialogOutcome) + 'static,
 ) {
     let (filter, filters) = sqlite_file_filters();
     let today = chrono::Local::now().date_naive();
@@ -61,20 +61,20 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
             Ok(file) => {
                 if let Some(path) = file.path() {
                     match db.export_backup(&path) {
-                        Ok(()) => on_complete(ImportOutcome::Done(path)),
-                        Err(e) => on_complete(ImportOutcome::Failed(e.to_string())),
+                        Ok(()) => on_complete(DialogOutcome::Done(path)),
+                        Err(e) => on_complete(DialogOutcome::Failed(e.to_string())),
                     }
                 } else {
-                    on_complete(ImportOutcome::Failed(
+                    on_complete(DialogOutcome::Failed(
                         "Failed to resolve destination file path".to_string(),
                     ));
                 }
             }
             Err(e) => {
                 if is_dialog_cancelled(&e) {
-                    on_complete(ImportOutcome::Cancelled);
+                    on_complete(DialogOutcome::Cancelled);
                 } else {
-                    on_complete(ImportOutcome::Failed(e.to_string()));
+                    on_complete(DialogOutcome::Failed(e.to_string()));
                 }
             }
         },
@@ -85,7 +85,7 @@ fn confirm_and_restore<W: IsA<gtk4::Window>>(
     parent: &W,
     path: PathBuf,
     db: &Rc<Database>,
-    on_complete: Rc<impl Fn(ImportOutcome) + 'static>,
+    on_complete: Rc<impl Fn(DialogOutcome) + 'static>,
 ) {
     let alert = libadwaita::AlertDialog::builder()
         .heading("Restore Database Backup?")
@@ -105,12 +105,12 @@ fn confirm_and_restore<W: IsA<gtk4::Window>>(
             if response == "restore" {
                 let restore_res = db_clone.restore_backup(&path);
                 gtk4::glib::idle_add_local_once(move || match restore_res {
-                    Ok(()) => on_complete(ImportOutcome::Done(path)),
-                    Err(e) => on_complete(ImportOutcome::Failed(e.to_string())),
+                    Ok(()) => on_complete(DialogOutcome::Done(path)),
+                    Err(e) => on_complete(DialogOutcome::Failed(e.to_string())),
                 });
             } else {
                 gtk4::glib::idle_add_local_once(move || {
-                    on_complete(ImportOutcome::Cancelled);
+                    on_complete(DialogOutcome::Cancelled);
                 });
             }
         },
@@ -122,7 +122,7 @@ fn confirm_and_restore<W: IsA<gtk4::Window>>(
 pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
     db: Rc<Database>,
-    on_complete: impl Fn(ImportOutcome) + 'static,
+    on_complete: impl Fn(DialogOutcome) + 'static,
 ) {
     let (filter, filters) = sqlite_file_filters();
 
@@ -143,16 +143,16 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
                 if let Some(path) = file.path() {
                     confirm_and_restore(&parent_clone, path, &db, Rc::clone(&on_complete_rc));
                 } else {
-                    on_complete_rc(ImportOutcome::Failed(
+                    on_complete_rc(DialogOutcome::Failed(
                         "Failed to resolve source file path".to_string(),
                     ));
                 }
             }
             Err(e) => {
                 if is_dialog_cancelled(&e) {
-                    on_complete_rc(ImportOutcome::Cancelled);
+                    on_complete_rc(DialogOutcome::Cancelled);
                 } else {
-                    on_complete_rc(ImportOutcome::Failed(e.to_string()));
+                    on_complete_rc(DialogOutcome::Failed(e.to_string()));
                 }
             }
         },

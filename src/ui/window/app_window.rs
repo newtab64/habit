@@ -9,7 +9,7 @@ use crate::ui::details::{
     build_details, connect_detail_actions, connect_drawing_areas, DetailsWidgets,
 };
 use crate::ui::habit_dialog::show_habit_dialog;
-use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog, ImportOutcome};
+use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog, DialogOutcome};
 use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
 use crate::ui::state::{default_database_path, refresh, DrawCaches, WindowInner};
 
@@ -114,7 +114,7 @@ fn register_export_action(
         };
         let toast = toast_exp.clone();
         trigger_export_dialog(&root_exp, db, move |outcome| match outcome {
-            ImportOutcome::Done(path) => {
+            DialogOutcome::Done(path) => {
                 let name = path
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -123,8 +123,8 @@ fn register_export_action(
                     "Backup exported to {name}"
                 )));
             }
-            ImportOutcome::Cancelled => {}
-            ImportOutcome::Failed(err) => {
+            DialogOutcome::Cancelled => {}
+            DialogOutcome::Failed(err) => {
                 toast.add_toast(libadwaita::Toast::new(&format!("Export failed: {err}")));
             }
         });
@@ -153,7 +153,7 @@ fn register_import_action(
         let inner_done = Rc::clone(&inner_imp);
         let caches_done = caches_imp.clone();
         trigger_import_dialog(&root_imp, db, move |outcome| match outcome {
-            ImportOutcome::Done(_path) => {
+            DialogOutcome::Done(_path) => {
                 let nav_view = {
                     let mut inner = inner_done.borrow_mut();
                     inner.selected_habit_id = None;
@@ -163,8 +163,8 @@ fn register_import_action(
                 refresh(&inner_done, &caches_done);
                 toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
             }
-            ImportOutcome::Cancelled => {}
-            ImportOutcome::Failed(err) => {
+            DialogOutcome::Cancelled => {}
+            DialogOutcome::Failed(err) => {
                 toast.add_toast(libadwaita::Toast::new(&format!("Import failed: {err}")));
             }
         });
@@ -196,7 +196,7 @@ fn setup_primary_menu(
             .application_name("Habit")
             .application_icon(crate::APP_ID)
             .developer_name("Habit Contributors")
-            .version("0.1.0")
+            .version(env!("CARGO_PKG_VERSION"))
             .license_type(gtk4::License::Gpl30)
             .comments("A native, local-only Linux habit tracker app for GNOME")
             .website("https://github.com/habit/habit")
