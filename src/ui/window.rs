@@ -19,7 +19,7 @@ use crate::ui::details::{
 #[cfg(feature = "ui")]
 use crate::ui::habit_dialog::show_habit_dialog;
 #[cfg(feature = "ui")]
-use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog};
+use crate::ui::portal::{trigger_export_dialog, trigger_import_dialog, ImportOutcome};
 #[cfg(feature = "ui")]
 use crate::ui::sidebar::{build_sidebar, SidebarWidgets};
 #[cfg(feature = "ui")]
@@ -139,8 +139,8 @@ fn setup_primary_menu(
             Rc::clone(&inner.db)
         };
         let toast = toast_exp.clone();
-        trigger_export_dialog(&root_exp, db, move |res| match res {
-            Ok(path) => {
+        trigger_export_dialog(&root_exp, db, move |outcome| match outcome {
+            ImportOutcome::Done(path) => {
                 let name = path
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -149,10 +149,9 @@ fn setup_primary_menu(
                     "Backup exported to {name}"
                 )));
             }
-            Err(err) => {
-                if !err.contains("cancelled") && !err.contains("Dismissed") {
-                    toast.add_toast(libadwaita::Toast::new(&format!("Export failed: {err}")));
-                }
+            ImportOutcome::Cancelled => {}
+            ImportOutcome::Failed(err) => {
+                toast.add_toast(libadwaita::Toast::new(&format!("Export failed: {err}")));
             }
         });
     });
@@ -172,8 +171,8 @@ fn setup_primary_menu(
         let toast = toast_imp.clone();
         let inner_done = Rc::clone(&inner_imp);
         let caches_done = caches_imp.clone();
-        trigger_import_dialog(&root_imp, db, move |res| match res {
-            Ok(_path) => {
+        trigger_import_dialog(&root_imp, db, move |outcome| match outcome {
+            ImportOutcome::Done(_path) => {
                 let nav_view = {
                     let mut inner = inner_done.borrow_mut();
                     inner.selected_habit_id = None;
@@ -183,10 +182,9 @@ fn setup_primary_menu(
                 refresh(&inner_done, &caches_done);
                 toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
             }
-            Err(err) => {
-                if !err.contains("cancelled") && !err.contains("Dismissed") {
-                    toast.add_toast(libadwaita::Toast::new(&format!("Import failed: {err}")));
-                }
+            ImportOutcome::Cancelled => {}
+            ImportOutcome::Failed(err) => {
+                toast.add_toast(libadwaita::Toast::new(&format!("Import failed: {err}")));
             }
         });
     });

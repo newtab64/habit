@@ -21,13 +21,32 @@ pub fn default_backup_filename(date: NaiveDate) -> String {
     format!("habit-backup-{}.db", date.format("%Y-%m-%d"))
 }
 
+/// Outcome of a database import or export dialog operation.
+#[cfg(feature = "ui")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportOutcome {
+    /// Operation completed successfully at the selected path.
+    Done(PathBuf),
+    /// The user dismissed the file chooser or cancelled the confirmation dialog.
+    Cancelled,
+    /// Selecting, exporting, or restoring the backup failed with an error message.
+    Failed(String),
+}
+
+#[cfg(feature = "ui")]
+fn is_dialog_cancelled(err: &gtk4::glib::Error) -> bool {
+    err.matches(gtk4::DialogError::Dismissed)
+        || err.matches(gtk4::DialogError::Cancelled)
+        || err.matches(gtk4::gio::IOErrorEnum::Cancelled)
+}
+
 /// Prompts the user via XDG `FileDialog` to select a destination path, then exports
 /// an atomic SQLite backup of the database to that path.
 #[cfg(feature = "ui")]
 pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
     db: Rc<Database>,
-    on_complete: impl Fn(Result<PathBuf, String>) + 'static,
+    on_complete: impl Fn(ImportOutcome) + 'static,
 ) {
     let filter = gtk4::FileFilter::new();
     filter.set_name(Some("SQLite Database (*.db)"));
@@ -54,15 +73,21 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
             Ok(file) => {
                 if let Some(path) = file.path() {
                     match db.export_backup(&path) {
-                        Ok(()) => on_complete(Ok(path)),
-                        Err(e) => on_complete(Err(e.to_string())),
+                        Ok(()) => on_complete(ImportOutcome::Done(path)),
+                        Err(e) => on_complete(ImportOutcome::Failed(e.to_string())),
                     }
                 } else {
-                    on_complete(Err("Failed to resolve destination file path".to_string()));
+                    on_complete(ImportOutcome::Failed(
+                        "Failed to resolve destination file path".to_string(),
+                    ));
                 }
             }
             Err(e) => {
-                on_complete(Err(e.to_string()));
+                if is_dialog_cancelled(&e) {
+                    on_complete(ImportOutcome::Cancelled);
+                } else {
+                    on_complete(ImportOutcome::Failed(e.to_string()));
+                }
             }
         },
     );
@@ -74,7 +99,7 @@ pub fn trigger_export_dialog<W: IsA<gtk4::Window>>(
 pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
     parent: &W,
     db: Rc<Database>,
-    on_complete: impl Fn(Result<PathBuf, String>) + 'static,
+    on_complete: impl Fn(ImportOutcome) + 'static,
 ) {
     let filter = gtk4::FileFilter::new();
     filter.set_name(Some("SQLite Database (*.db)"));
@@ -117,22 +142,28 @@ pub fn trigger_import_dialog<W: IsA<gtk4::Window>>(
                             if response == "restore" {
                                 let restore_res = db_clone.restore_backup(&path);
                                 gtk4::glib::idle_add_local_once(move || match restore_res {
-                                    Ok(()) => on_complete_cb(Ok(path)),
-                                    Err(e) => on_complete_cb(Err(e.to_string())),
+                                    Ok(()) => on_complete_cb(ImportOutcome::Done(path)),
+                                    Err(e) => on_complete_cb(ImportOutcome::Failed(e.to_string())),
                                 });
                             } else {
                                 gtk4::glib::idle_add_local_once(move || {
-                                    on_complete_cb(Err("Backup restoration cancelled".to_string()));
+                                    on_complete_cb(ImportOutcome::Cancelled);
                                 });
                             }
                         },
                     );
                 } else {
-                    on_complete(Err("Failed to resolve source file path".to_string()));
+                    on_complete(ImportOutcome::Failed(
+                        "Failed to resolve source file path".to_string(),
+                    ));
                 }
             }
             Err(e) => {
-                on_complete(Err(e.to_string()));
+                if is_dialog_cancelled(&e) {
+                    on_complete(ImportOutcome::Cancelled);
+                } else {
+                    on_complete(ImportOutcome::Failed(e.to_string()));
+                }
             }
         },
     );

@@ -119,7 +119,6 @@ impl Drop for TempFileGuard {
     }
 }
 
-#[allow(clippy::significant_drop_tightening)]
 impl Database {
     /// Creates and initializes a fresh in-memory SQLite database.
     ///
@@ -221,16 +220,19 @@ impl Database {
     /// # Errors
     /// Returns [`DbError`] if querying or row deserialization fails.
     pub fn get_habits(&self) -> Result<Vec<Habit>, DbError> {
+        let mut habits = Vec::new();
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
              FROM habits ORDER BY sort_order ASC, id ASC;",
         )?;
         let mut rows = stmt.query([])?;
-        let mut habits = Vec::new();
         while let Some(row) = rows.next()? {
             habits.push(Self::row_to_habit(row)?);
         }
+        drop(rows);
+        drop(stmt);
+        drop(conn);
         Ok(habits)
     }
 
@@ -249,6 +251,7 @@ impl Database {
             )?;
         }
         tx.commit()?;
+        drop(conn);
         Ok(())
     }
 
@@ -263,11 +266,15 @@ impl Database {
              FROM habits WHERE id = ?1;",
         )?;
         let mut rows = stmt.query(rusqlite::params![id])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(Self::row_to_habit(row)?))
+        let habit = if let Some(row) = rows.next()? {
+            Some(Self::row_to_habit(row)?)
         } else {
-            Ok(None)
-        }
+            None
+        };
+        drop(rows);
+        drop(stmt);
+        drop(conn);
+        Ok(habit)
     }
 
     /// Updates an existing habit in the database.
@@ -284,8 +291,7 @@ impl Database {
 
         let archived_int: i64 = i64::from(habit.archived);
 
-        let conn = self.lock_conn()?;
-        let affected = conn.execute(
+        let affected = self.lock_conn()?.execute(
             "UPDATE habits SET
                 name = ?1,
                 habit_type = ?2,
@@ -318,8 +324,9 @@ impl Database {
     /// # Errors
     /// Returns [`DbError::HabitNotFound`] if the habit ID does not exist, or [`DbError::Sqlite`].
     pub fn delete_habit(&self, id: i64) -> Result<(), DbError> {
-        let conn = self.lock_conn()?;
-        let affected = conn.execute("DELETE FROM habits WHERE id = ?1;", rusqlite::params![id])?;
+        let affected = self
+            .lock_conn()?
+            .execute("DELETE FROM habits WHERE id = ?1;", rusqlite::params![id])?;
         if affected == 0 {
             return Err(DbError::HabitNotFound(id));
         }
@@ -338,8 +345,7 @@ impl Database {
         value: f64,
     ) -> Result<(), DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
-        let conn = self.lock_conn()?;
-        conn.execute(
+        self.lock_conn()?.execute(
             "INSERT OR REPLACE INTO habit_entries (habit_id, date, entry_status, value)
              VALUES (?1, ?2, ?3, ?4);",
             rusqlite::params![habit_id, date_str, status.as_str(), value],
@@ -353,8 +359,7 @@ impl Database {
     /// Returns [`DbError`] if SQLite execution fails.
     pub fn delete_entry(&self, habit_id: i64, date: NaiveDate) -> Result<(), DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
-        let conn = self.lock_conn()?;
-        conn.execute(
+        self.lock_conn()?.execute(
             "DELETE FROM habit_entries WHERE habit_id = ?1 AND date = ?2;",
             rusqlite::params![habit_id, date_str],
         )?;
@@ -373,6 +378,7 @@ impl Database {
     ) -> Result<Vec<HabitEntry>, DbError> {
         let from_str = from.format("%Y-%m-%d").to_string();
         let to_str = to.format("%Y-%m-%d").to_string();
+        let mut entries = Vec::new();
         let conn = self.lock_conn()?;
         let mut stmt = conn.prepare(
             "SELECT habit_id, date, entry_status, value
@@ -381,10 +387,12 @@ impl Database {
              ORDER BY date ASC;",
         )?;
         let mut rows = stmt.query(rusqlite::params![habit_id, from_str, to_str])?;
-        let mut entries = Vec::new();
         while let Some(row) = rows.next()? {
             entries.push(Self::row_to_entry(row)?);
         }
+        drop(rows);
+        drop(stmt);
+        drop(conn);
         Ok(entries)
     }
 
@@ -401,11 +409,15 @@ impl Database {
              WHERE habit_id = ?1 AND date = ?2;",
         )?;
         let mut rows = stmt.query(rusqlite::params![habit_id, date_str])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(Self::row_to_entry(row)?))
+        let entry = if let Some(row) = rows.next()? {
+            Some(Self::row_to_entry(row)?)
         } else {
-            Ok(None)
-        }
+            None
+        };
+        drop(rows);
+        drop(stmt);
+        drop(conn);
+        Ok(entry)
     }
 
     /// Creates an atomic snapshot backup of the current database to `target_path`.
