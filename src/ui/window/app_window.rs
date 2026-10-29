@@ -166,7 +166,9 @@ fn register_import_action(
                     inner.selected_habit_id = None;
                     inner.nav_view.clone()
                 };
-                let _ = nav_view.pop_to_tag("habits");
+                if !nav_view.pop_to_tag("habits") {
+                    // Already at the root "habits" navigation page.
+                }
                 refresh(&inner_done, &caches_done);
                 toast.add_toast(libadwaita::Toast::new("Database restored successfully"));
             }
