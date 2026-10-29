@@ -203,6 +203,10 @@ fn connect_edit_action(
                 };
                 if let Err(e) = db.update_habit(&updated_habit) {
                     eprintln!("Failed to update habit: {e}");
+                    let toast_overlay = inner_saved.borrow().toast_overlay.clone();
+                    toast_overlay.add_toast(libadwaita::Toast::new(&format!(
+                        "Failed to update habit: {e}"
+                    )));
                 }
                 {
                     let mut inner = inner_saved.borrow_mut();
@@ -255,6 +259,11 @@ fn connect_delete_action(
                     };
                     if let Err(e) = db.delete_habit(id) {
                         eprintln!("Failed to delete habit: {e}");
+                        let toast_overlay = inner_cb.borrow().toast_overlay.clone();
+                        toast_overlay.add_toast(libadwaita::Toast::new(&format!(
+                            "Failed to delete habit: {e}"
+                        )));
+                        return;
                     }
                     gtk4::glib::idle_add_local_once(move || {
                         let nav_view = {

@@ -79,17 +79,24 @@ fn connect_controllers(
                 let inner = inner_saved.borrow();
                 Rc::clone(&inner.db)
             };
-            let create_res = db.create_habit(&new_habit);
-            if let Ok(id) = create_res {
-                let (nav_view, details_page) = {
-                    let mut inner = inner_saved.borrow_mut();
-                    inner.selected_habit_id = Some(id);
-                    (inner.nav_view.clone(), inner.details_page.clone())
-                };
-                refresh(&inner_saved, &caches_saved);
-                nav_view.push(&details_page);
-            } else {
-                refresh(&inner_saved, &caches_saved);
+            match db.create_habit(&new_habit) {
+                Ok(id) => {
+                    let (nav_view, details_page) = {
+                        let mut inner = inner_saved.borrow_mut();
+                        inner.selected_habit_id = Some(id);
+                        (inner.nav_view.clone(), inner.details_page.clone())
+                    };
+                    refresh(&inner_saved, &caches_saved);
+                    nav_view.push(&details_page);
+                }
+                Err(e) => {
+                    eprintln!("Failed to create habit: {e}");
+                    let toast_overlay = inner_saved.borrow().toast_overlay.clone();
+                    toast_overlay.add_toast(libadwaita::Toast::new(&format!(
+                        "Failed to create habit: {e}"
+                    )));
+                    refresh(&inner_saved, &caches_saved);
+                }
             }
         });
     });
