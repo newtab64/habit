@@ -230,10 +230,11 @@ fn create_window_inner(
             &base_css_provider,
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+        // Dynamic per-habit rules override base rules regardless of registration order.
         gtk4::style_context_add_provider_for_display(
             &display,
             &habit_css_provider,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
         );
     }
 
