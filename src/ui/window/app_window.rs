@@ -250,6 +250,7 @@ fn create_window_inner(
         lock_btn: sidebar.lock_btn,
         add_btn: sidebar.add_btn,
         habits_list_box: sidebar.habits_list_box,
+        list_vadjustment: sidebar.list_vadjustment,
         habit_score_label: sidebar.habit_score_label,
         header_day_labels: sidebar.header_day_labels,
         habit_css_provider,

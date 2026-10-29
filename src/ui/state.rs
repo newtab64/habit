@@ -68,6 +68,7 @@ pub struct WindowInner {
     pub lock_btn: gtk4::Button,
     pub add_btn: gtk4::Button,
     pub habits_list_box: gtk4::Box,
+    pub list_vadjustment: gtk4::Adjustment,
     pub habit_score_label: gtk4::Label,
     pub header_day_labels: Vec<gtk4::Label>,
     pub habit_css_provider: gtk4::CssProvider,
@@ -315,6 +316,12 @@ fn append_habit_row(
     inner.habits_list_box.append(row_widget.widget());
 }
 
+fn restore_scroll(adj: &gtk4::Adjustment, value: f64) {
+    adj.set_value(value);
+    let adj = adj.clone();
+    gtk4::glib::idle_add_local_once(move || adj.set_value(value));
+}
+
 fn rebuild_habit_list(
     inner_rc: &Rc<RefCell<WindowInner>>,
     inner: &WindowInner,
@@ -323,6 +330,7 @@ fn rebuild_habit_list(
     today: NaiveDate,
 ) {
     let size_groups = create_size_groups(inner);
+    let scroll = inner.list_vadjustment.value();
 
     while let Some(child) = inner.habits_list_box.first_child() {
         inner.habits_list_box.remove(&child);
@@ -337,6 +345,8 @@ fn rebuild_habit_list(
     for habit in &ordered_habits {
         append_habit_row(inner_rc, inner, habit, caches, today, &size_groups);
     }
+
+    restore_scroll(&inner.list_vadjustment, scroll);
 }
 
 fn update_charts(

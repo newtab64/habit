@@ -12,6 +12,8 @@ pub struct SidebarWidgets {
     pub page: libadwaita::NavigationPage,
     /// Box container containing habit row widgets.
     pub habits_list_box: gtk4::Box,
+    /// Vertical scroll position of the habit list.
+    pub list_vadjustment: gtk4::Adjustment,
     /// Header label displaying "HABIT & SCORE".
     pub habit_score_label: gtk4::Label,
     /// Header labels for the 5 quick-check dates.
@@ -111,6 +113,7 @@ pub fn build_sidebar() -> SidebarWidgets {
     content_box.append(&habits_list_box);
 
     sidebar_scrolled.set_child(Some(&content_box));
+    let list_vadjustment = sidebar_scrolled.vadjustment();
     sidebar_box.append(&sidebar_scrolled);
 
     let page = libadwaita::NavigationPage::new(&sidebar_box, "Habits");
@@ -119,6 +122,7 @@ pub fn build_sidebar() -> SidebarWidgets {
     SidebarWidgets {
         page,
         habits_list_box,
+        list_vadjustment,
         habit_score_label,
         header_day_labels,
         lock_btn,
