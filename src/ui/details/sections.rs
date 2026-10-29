@@ -23,6 +23,22 @@ pub fn create_stat_column(value_label: &gtk4::Label, title: &str) -> gtk4::Box {
     col
 }
 
+fn build_ring_box() -> (gtk4::Box, gtk4::DrawingArea) {
+    let ring_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    ring_box.set_valign(gtk4::Align::Center);
+    ring_box.set_halign(gtk4::Align::Fill);
+    ring_box.set_hexpand(true);
+
+    let ring_drawing_area = gtk4::DrawingArea::new();
+    ring_drawing_area.set_content_width(38);
+    ring_drawing_area.set_content_height(38);
+    ring_drawing_area.set_halign(gtk4::Align::Center);
+    ring_drawing_area.set_valign(gtk4::Align::Center);
+    ring_box.append(&ring_drawing_area);
+
+    (ring_box, ring_drawing_area)
+}
+
 /// Builds the overview stat card section with progress ring and statistics columns.
 #[must_use]
 pub fn build_overview_section() -> (
@@ -55,17 +71,7 @@ pub fn build_overview_section() -> (
     stats_box.set_margin_bottom(12);
     stats_box.set_margin_top(2);
 
-    let ring_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    ring_box.set_valign(gtk4::Align::Center);
-    ring_box.set_halign(gtk4::Align::Fill);
-    ring_box.set_hexpand(true);
-
-    let ring_drawing_area = gtk4::DrawingArea::new();
-    ring_drawing_area.set_content_width(38);
-    ring_drawing_area.set_content_height(38);
-    ring_drawing_area.set_halign(gtk4::Align::Center);
-    ring_drawing_area.set_valign(gtk4::Align::Center);
-    ring_box.append(&ring_drawing_area);
+    let (ring_box, ring_drawing_area) = build_ring_box();
     stats_box.append(&ring_box);
 
     let score_card_value = gtk4::Label::new(Some("0%"));

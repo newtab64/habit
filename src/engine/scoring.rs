@@ -221,6 +221,34 @@ pub fn calculate_streaks(habit: &Habit, entries: &[HabitEntry], as_of: NaiveDate
     (current_streak, best_streak)
 }
 
+fn collect_score_window(
+    score_by_date: &HashMap<NaiveDate, f64>,
+    window_start: NaiveDate,
+    as_of: NaiveDate,
+    days: usize,
+) -> Vec<f64> {
+    let mut history = Vec::with_capacity(days);
+    let mut d = window_start;
+    while d <= as_of {
+        let s = score_by_date.get(&d).copied().unwrap_or(0.0);
+        history.push(s);
+        match d.succ_opt() {
+            Some(next) => d = next,
+            None => break,
+        }
+    }
+
+    // In case of any date boundary mismatch, guarantee length == days
+    while history.len() < days {
+        history.insert(0, 0.0);
+    }
+    if history.len() > days {
+        history.truncate(days);
+    }
+
+    history
+}
+
 /// Calculates historical habit score for each of the last `days` days ending at `as_of`.
 ///
 /// Returns a vector of length `days`, ordered oldest first, with the last element
@@ -284,26 +312,7 @@ pub fn calculate_score_history(
         }
     }
 
-    let mut history = Vec::with_capacity(days);
-    let mut d = window_start;
-    while d <= as_of {
-        let s = score_by_date.get(&d).copied().unwrap_or(0.0);
-        history.push(s);
-        match d.succ_opt() {
-            Some(next) => d = next,
-            None => break,
-        }
-    }
-
-    // In case of any date boundary mismatch, guarantee length == days
-    while history.len() < days {
-        history.insert(0, 0.0);
-    }
-    if history.len() > days {
-        history.truncate(days);
-    }
-
-    history
+    collect_score_window(&score_by_date, window_start, as_of, days)
 }
 
 /// Backwards-compatibility alias for `calculate_score_history`.

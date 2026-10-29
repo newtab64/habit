@@ -44,6 +44,21 @@ pub fn calculate_curve_points(data: &[f64], width: f64, height: f64, padding: f6
         .collect()
 }
 
+#[cfg(feature = "ui")]
+fn trace_curve_segments(cr: &cairo::Context, pts: &[Point]) {
+    cr.move_to(pts[0].x, pts[0].y);
+    if pts.len() == 1 {
+        cr.line_to(pts[0].x + 1.0, pts[0].y);
+    } else {
+        for window in pts.windows(2) {
+            let p0 = window[0];
+            let p1 = window[1];
+            let cp_x = f64::midpoint(p0.x, p1.x);
+            cr.curve_to(cp_x, p0.y, cp_x, p1.y, p1.x, p1.y);
+        }
+    }
+}
+
 /// Renders a smooth habit strength curve with gradient fill using Cairo.
 ///
 /// Draws a smooth cubic bezier line with a 2.5px stroke in the specified color,
@@ -72,24 +87,11 @@ pub fn draw_strength_curve(
 
     // 1. Draw gradient fill beneath the curve
     cr.new_path();
-    cr.move_to(pts[0].x, pts[0].y);
-
+    trace_curve_segments(cr, &pts);
     if pts.len() == 1 {
-        cr.line_to(pts[0].x + 1.0, pts[0].y);
         cr.line_to(pts[0].x + 1.0, bottom_y);
-    } else {
-        for window in pts.windows(2) {
-            let p0 = window[0];
-            let p1 = window[1];
-            let cp1_x = f64::midpoint(p0.x, p1.x);
-            let cp1_y = p0.y;
-            let cp2_x = f64::midpoint(p0.x, p1.x);
-            let cp2_y = p1.y;
-            cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, p1.x, p1.y);
-        }
-        if let Some(last) = pts.last() {
-            cr.line_to(last.x, bottom_y);
-        }
+    } else if let Some(last) = pts.last() {
+        cr.line_to(last.x, bottom_y);
     }
     cr.line_to(pts[0].x, bottom_y);
     cr.close_path();
@@ -102,20 +104,7 @@ pub fn draw_strength_curve(
 
     // 2. Draw smooth stroke curve (2.5px width)
     cr.new_path();
-    cr.move_to(pts[0].x, pts[0].y);
-    if pts.len() == 1 {
-        cr.line_to(pts[0].x + 1.0, pts[0].y);
-    } else {
-        for window in pts.windows(2) {
-            let p0 = window[0];
-            let p1 = window[1];
-            let cp1_x = f64::midpoint(p0.x, p1.x);
-            let cp1_y = p0.y;
-            let cp2_x = f64::midpoint(p0.x, p1.x);
-            let cp2_y = p1.y;
-            cr.curve_to(cp1_x, cp1_y, cp2_x, cp2_y, p1.x, p1.y);
-        }
-    }
+    trace_curve_segments(cr, &pts);
     cr.set_source_rgba(color.r, color.g, color.b, color.a);
     cr.set_line_width(2.5);
     let _ = cr.stroke();

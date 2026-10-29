@@ -273,6 +273,16 @@ fn create_window_inner(
     (inner, lock_btn, add_btn, menu_btn)
 }
 
+fn build_app_window(app: &libadwaita::Application) -> libadwaita::ApplicationWindow {
+    libadwaita::ApplicationWindow::builder()
+        .application(app)
+        .title("Habits")
+        .default_width(430)
+        .default_height(700)
+        .resizable(false)
+        .build()
+}
+
 /// Main application window providing Fast-Check List and push-navigation for details.
 #[derive(Debug, Clone)]
 pub struct HabitWindow {
@@ -342,13 +352,7 @@ impl HabitWindow {
     /// Creates and initializes the `HabitWindow` with the provided database instance.
     #[must_use]
     pub fn new(app: &libadwaita::Application, db: Database) -> Self {
-        let window = libadwaita::ApplicationWindow::builder()
-            .application(app)
-            .title("Habits")
-            .default_width(430)
-            .default_height(700)
-            .resizable(false)
-            .build();
+        let window = build_app_window(app);
 
         let nav_view = libadwaita::NavigationView::new();
         nav_view.set_animate_transitions(false);

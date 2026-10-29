@@ -57,19 +57,42 @@ pub struct DetailsWidgets {
     pub history_editor: HistoryEditorWidgets,
 }
 
+fn wrap_details_page(
+    content_header: &libadwaita::HeaderBar,
+    details_vbox: &gtk4::Box,
+) -> (libadwaita::NavigationPage, HistoryEditorWidgets) {
+    let details_vbox_margins = 18;
+    details_vbox.set_margin_start(details_vbox_margins);
+    details_vbox.set_margin_end(details_vbox_margins);
+    details_vbox.set_margin_top(14);
+    details_vbox.set_margin_bottom(details_vbox_margins);
+
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    content_box.append(content_header);
+
+    let details_scrolled = gtk4::ScrolledWindow::new();
+    details_scrolled.set_vexpand(true);
+    details_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
+    details_scrolled.set_child(Some(details_vbox));
+    content_box.append(&details_scrolled);
+
+    let overlay = gtk4::Overlay::new();
+    overlay.set_child(Some(&content_box));
+
+    let history_editor = build_history_editor();
+    overlay.add_overlay(&history_editor.container);
+
+    let page = libadwaita::NavigationPage::new(&overlay, "Details");
+    page.set_tag(Some("details"));
+
+    (page, history_editor)
+}
+
 /// Builds the habit details page and embeds the history editor overlay.
 #[must_use]
 pub fn build_details() -> DetailsWidgets {
-    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
     let (content_header, edit_btn, delete_btn) = build_details_header();
-    content_box.append(&content_header);
-
     let details_vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
-    details_vbox.set_margin_start(18);
-    details_vbox.set_margin_end(18);
-    details_vbox.set_margin_top(14);
-    details_vbox.set_margin_bottom(18);
 
     let (info_box, title_label, schedule_label, target_label) = build_info_section();
     details_vbox.append(&info_box);
@@ -102,20 +125,7 @@ pub fn build_details() -> DetailsWidgets {
     details_vbox.append(&heatmap_nav_box);
     details_vbox.append(&heatmap_drawing_area);
 
-    let details_scrolled = gtk4::ScrolledWindow::new();
-    details_scrolled.set_vexpand(true);
-    details_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
-    details_scrolled.set_child(Some(&details_vbox));
-    content_box.append(&details_scrolled);
-
-    let overlay = gtk4::Overlay::new();
-    overlay.set_child(Some(&content_box));
-
-    let history_editor = build_history_editor();
-    overlay.add_overlay(&history_editor.container);
-
-    let page = libadwaita::NavigationPage::new(&overlay, "Details");
-    page.set_tag(Some("details"));
+    let (page, history_editor) = wrap_details_page(&content_header, &details_vbox);
 
     DetailsWidgets {
         page,
@@ -218,6 +228,20 @@ fn connect_edit_action(
     });
 }
 
+fn build_delete_alert(habit_name: &str) -> libadwaita::AlertDialog {
+    let alert = libadwaita::AlertDialog::new(
+        Some(&format!("Delete \"{habit_name}\"?")),
+        Some(
+            "All completion history and progress data for this habit will be permanently deleted. This action cannot be undone.",
+        ),
+    );
+    alert.add_response("cancel", "Cancel");
+    alert.add_response("delete", "Delete");
+    alert.set_response_appearance("delete", libadwaita::ResponseAppearance::Destructive);
+    alert.set_default_response(Some("cancel"));
+    alert
+}
+
 fn connect_delete_action(
     details: &DetailsWidgets,
     inner_rc: &Rc<RefCell<WindowInner>>,
@@ -238,16 +262,7 @@ fn connect_delete_action(
                 .ok()
                 .flatten()
                 .map_or_else(|| "this habit".to_string(), |h| h.name);
-            let alert = libadwaita::AlertDialog::new(
-                Some(&format!("Delete \"{habit_name}\"?")),
-                Some(
-                    "All completion history and progress data for this habit will be permanently deleted. This action cannot be undone.",
-                ),
-            );
-            alert.add_response("cancel", "Cancel");
-            alert.add_response("delete", "Delete");
-            alert.set_response_appearance("delete", libadwaita::ResponseAppearance::Destructive);
-            alert.set_default_response(Some("cancel"));
+            let alert = build_delete_alert(&habit_name);
 
             let inner_cb = Rc::clone(&inner_delete);
             let caches_cb = caches_delete.clone();

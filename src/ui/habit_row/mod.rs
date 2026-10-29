@@ -59,6 +59,24 @@ pub fn format_measurable_value(val: f64) -> String {
     }
 }
 
+fn format_measurable_symbol(entry: &HabitEntry, target: f64) -> Option<DaySymbolDisplay> {
+    if entry.value >= target && (entry.status == EntryStatus::Completed || entry.value > 0.0) {
+        return Some(DaySymbolDisplay {
+            text: format_measurable_value(entry.value),
+            css_class: "symbol-completed",
+            is_accent: true,
+        });
+    }
+    if entry.value > 0.0 {
+        return Some(DaySymbolDisplay {
+            text: format_measurable_value(entry.value),
+            css_class: "symbol-partial",
+            is_accent: false,
+        });
+    }
+    None
+}
+
 /// Formats the bare symbol display attributes for a habit on a specific date.
 ///
 /// Rules:
@@ -99,21 +117,8 @@ pub fn format_day_symbol(
             }
         }
         HabitType::Measurable { target, .. } => {
-            if let Some(e) = entry {
-                if e.value >= *target && (e.status == EntryStatus::Completed || e.value > 0.0) {
-                    return DaySymbolDisplay {
-                        text: format_measurable_value(e.value),
-                        css_class: "symbol-completed",
-                        is_accent: true,
-                    };
-                }
-                if e.value > 0.0 {
-                    return DaySymbolDisplay {
-                        text: format_measurable_value(e.value),
-                        css_class: "symbol-partial",
-                        is_accent: false,
-                    };
-                }
+            if let Some(sym) = entry.and_then(|e| format_measurable_symbol(e, *target)) {
+                return sym;
             }
         }
     }

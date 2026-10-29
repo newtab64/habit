@@ -9,8 +9,6 @@ use crate::engine::models::{
     SCHEDULE_WEEKENDS, SCHEDULE_WORKDAYS,
 };
 
-use crate::ui::habit_dialog::validate_habit_form;
-
 pub(super) struct HabitFormRows {
     pub(super) name_row: libadwaita::EntryRow,
     pub(super) type_row: libadwaita::ComboRow,
@@ -249,46 +247,4 @@ pub(super) fn build_form_page(
         hex_row,
     };
     (pref_page, form)
-}
-
-pub(super) fn connect_save_button(
-    save_btn: &gtk4::Button,
-    form: HabitFormRows,
-    toast_overlay: libadwaita::ToastOverlay,
-    habit_orig: Option<Habit>,
-    close_save: impl Fn() + 'static,
-    on_save: impl Fn(Habit) + 'static,
-) {
-    save_btn.connect_clicked(move |_| {
-        let name = form.name_row.text().to_string();
-        let is_meas = form.type_row.selected() == 1;
-        let target = form.target_row.value();
-        let unit = form.unit_row.text().to_string();
-
-        let mut scheduled_days = 0u8;
-        for (bit, s) in &form.switch_rows {
-            if s.is_active() {
-                scheduled_days |= *bit;
-            }
-        }
-
-        let hex_color = form.hex_row.text().to_string();
-
-        match validate_habit_form(&name, is_meas, target, &unit, scheduled_days, &hex_color) {
-            Ok(mut validated_habit) => {
-                if let Some(ref orig) = habit_orig {
-                    validated_habit.id = orig.id;
-                    validated_habit.archived = orig.archived;
-                    validated_habit.created_at = orig.created_at;
-                }
-                close_save();
-                on_save(validated_habit);
-            }
-            Err(err) => {
-                let toast = libadwaita::Toast::new(&err.to_string());
-                toast.set_priority(libadwaita::ToastPriority::High);
-                toast_overlay.add_toast(toast);
-            }
-        }
-    });
 }

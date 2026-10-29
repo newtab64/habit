@@ -234,17 +234,11 @@ fn ordered_habits_for_render(
     list
 }
 
-fn rebuild_habit_list(
-    inner_rc: &Rc<RefCell<WindowInner>>,
-    inner: &WindowInner,
-    habits: &[Habit],
-    caches: &DrawCaches,
-    today: NaiveDate,
-) {
+fn create_size_groups(inner: &WindowInner) -> (gtk4::SizeGroup, Vec<gtk4::SizeGroup>) {
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
     left_group.add_widget(&inner.habit_score_label);
 
-    let col_groups: Vec<gtk4::SizeGroup> = (0..crate::ui::habit_row::QUICK_CHECK_DAYS)
+    let col_groups = (0..crate::ui::habit_row::QUICK_CHECK_DAYS)
         .map(|i| {
             let sg = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
             if let Some(lbl) = inner.header_day_labels.get(i) {
@@ -254,11 +248,10 @@ fn rebuild_habit_list(
         })
         .collect();
 
-    while let Some(child) = inner.habits_list_box.first_child() {
-        inner.habits_list_box.remove(&child);
-    }
+    (left_group, col_groups)
+}
 
-    let is_reorder = caches.reorder_mode.get();
+fn update_reorder_controls(inner: &WindowInner, is_reorder: bool) {
     inner.lock_btn.set_icon_name(if is_reorder {
         "changes-allow-symbolic"
     } else {
@@ -270,52 +263,79 @@ fn rebuild_habit_list(
         "Unlock to Reorder Habits"
     }));
     inner.add_btn.set_sensitive(!is_reorder);
+}
+
+fn append_habit_row(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    inner: &WindowInner,
+    habit: &Habit,
+    caches: &DrawCaches,
+    today: NaiveDate,
+    size_groups: &(gtk4::SizeGroup, Vec<gtk4::SizeGroup>),
+) {
+    let Some(habit_id) = habit.id else { return };
+    let entries = inner
+        .db
+        .get_entries(habit_id, NaiveDate::MIN, today)
+        .unwrap_or_default();
+    let score = calculate_habit_score(habit, &entries, today);
+
+    let inner_toggle = Rc::clone(inner_rc);
+    let caches_toggle = caches.clone();
+    let on_toggle = move |hid: i64, d: NaiveDate, v: Option<f64>| {
+        handle_toggle(&inner_toggle, &caches_toggle, hid, d, v);
+    };
+
+    let inner_sel = Rc::clone(inner_rc);
+    let caches_sel = caches.clone();
+    let on_select = move |hid: i64| {
+        handle_select(&inner_sel, &caches_sel, hid);
+    };
+
+    let Some(row_widget) = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select)
+    else {
+        return;
+    };
+    if caches.reorder_mode.get() {
+        row_widget.enable_reorder_drag(
+            habit_id,
+            &inner.habits_list_box,
+            &caches.staged_habit_order,
+        );
+    }
+    size_groups.0.add_widget(&row_widget.left_box);
+    for (i, btn) in row_widget.day_buttons.iter().enumerate() {
+        if let Some(sg) = size_groups.1.get(i) {
+            sg.add_widget(btn);
+        }
+    }
+    if habit.id == inner.selected_habit_id {
+        row_widget.widget().add_css_class("selected");
+    }
+    inner.habits_list_box.append(row_widget.widget());
+}
+
+fn rebuild_habit_list(
+    inner_rc: &Rc<RefCell<WindowInner>>,
+    inner: &WindowInner,
+    habits: &[Habit],
+    caches: &DrawCaches,
+    today: NaiveDate,
+) {
+    let size_groups = create_size_groups(inner);
+
+    while let Some(child) = inner.habits_list_box.first_child() {
+        inner.habits_list_box.remove(&child);
+    }
+
+    let is_reorder = caches.reorder_mode.get();
+    update_reorder_controls(inner, is_reorder);
 
     let ordered_habits =
         ordered_habits_for_render(habits, is_reorder, &caches.staged_habit_order.borrow());
 
     for habit in &ordered_habits {
-        let Some(habit_id) = habit.id else { continue };
-        let entries = inner
-            .db
-            .get_entries(habit_id, NaiveDate::MIN, today)
-            .unwrap_or_default();
-        let score = calculate_habit_score(habit, &entries, today);
-
-        let inner_toggle = Rc::clone(inner_rc);
-        let caches_toggle = caches.clone();
-        let on_toggle = move |hid: i64, d: NaiveDate, v: Option<f64>| {
-            handle_toggle(&inner_toggle, &caches_toggle, hid, d, v);
-        };
-
-        let inner_sel = Rc::clone(inner_rc);
-        let caches_sel = caches.clone();
-        let on_select = move |hid: i64| {
-            handle_select(&inner_sel, &caches_sel, hid);
-        };
-
-        let Some(row_widget) =
-            HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select)
-        else {
-            continue;
-        };
-        if is_reorder {
-            row_widget.enable_reorder_drag(
-                habit_id,
-                &inner.habits_list_box,
-                &caches.staged_habit_order,
-            );
-        }
-        left_group.add_widget(&row_widget.left_box);
-        for (i, btn) in row_widget.day_buttons.iter().enumerate() {
-            if let Some(sg) = col_groups.get(i) {
-                sg.add_widget(btn);
-            }
-        }
-        if habit.id == inner.selected_habit_id {
-            row_widget.widget().add_css_class("selected");
-        }
-        inner.habits_list_box.append(row_widget.widget());
+        append_habit_row(inner_rc, inner, habit, caches, today, &size_groups);
     }
 }
 

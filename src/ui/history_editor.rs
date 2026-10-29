@@ -28,23 +28,7 @@ pub struct HistoryEditorWidgets {
     pub drawing_area: gtk4::DrawingArea,
 }
 
-/// Builds the history editor bottom sheet overlay widgets.
-#[must_use]
-pub fn build_history_editor() -> HistoryEditorWidgets {
-    let editor_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    editor_container.set_visible(false);
-    editor_container.add_css_class("editor-dimming-backdrop");
-
-    let editor_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    editor_dimming.set_vexpand(true);
-    editor_dimming.set_hexpand(true);
-    editor_container.append(&editor_dimming);
-
-    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    sheet_box.set_valign(gtk4::Align::End);
-    sheet_box.set_hexpand(true);
-    sheet_box.add_css_class("editor-bottom-sheet");
-
+fn build_editor_header() -> (gtk4::CenterBox, libadwaita::WindowTitle, gtk4::Button) {
     let sheet_header = gtk4::CenterBox::new();
     sheet_header.add_css_class("editor-sheet-header");
     sheet_header.set_margin_start(16);
@@ -60,7 +44,16 @@ pub fn build_history_editor() -> HistoryEditorWidgets {
     editor_close_btn.add_css_class("circular");
     editor_close_btn.set_tooltip_text(Some("Close"));
     sheet_header.set_end_widget(Some(&editor_close_btn));
-    sheet_box.append(&sheet_header);
+
+    (sheet_header, editor_title, editor_close_btn)
+}
+
+fn build_editor_sheet(sheet_header: &gtk4::CenterBox) -> (gtk4::Box, gtk4::DrawingArea) {
+    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    sheet_box.set_valign(gtk4::Align::End);
+    sheet_box.set_hexpand(true);
+    sheet_box.add_css_class("editor-bottom-sheet");
+    sheet_box.append(sheet_header);
 
     let editor_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     editor_sep.set_margin_bottom(4);
@@ -77,6 +70,24 @@ pub fn build_history_editor() -> HistoryEditorWidgets {
     editor_drawing_area.set_hexpand(true);
     sheet_content.append(&editor_drawing_area);
     sheet_box.append(&sheet_content);
+
+    (sheet_box, editor_drawing_area)
+}
+
+/// Builds the history editor bottom sheet overlay widgets.
+#[must_use]
+pub fn build_history_editor() -> HistoryEditorWidgets {
+    let editor_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    editor_container.set_visible(false);
+    editor_container.add_css_class("editor-dimming-backdrop");
+
+    let editor_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    editor_dimming.set_vexpand(true);
+    editor_dimming.set_hexpand(true);
+    editor_container.append(&editor_dimming);
+
+    let (sheet_header, editor_title, editor_close_btn) = build_editor_header();
+    let (sheet_box, editor_drawing_area) = build_editor_sheet(&sheet_header);
 
     let sheet_revealer = gtk4::Revealer::new();
     sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
@@ -285,6 +296,26 @@ impl HistoryEditorWidgets {
     }
 }
 
+const fn next_entry_state(
+    is_scheduled: bool,
+    cur_status: Option<EntryStatus>,
+    target_val: f64,
+) -> (Option<EntryStatus>, f64, bool) {
+    if is_scheduled {
+        match cur_status {
+            None | Some(EntryStatus::Missed) => (Some(EntryStatus::Completed), target_val, false),
+            Some(EntryStatus::Completed) => (Some(EntryStatus::Skipped), 0.0, false),
+            Some(EntryStatus::Skipped) => (None, 0.0, true),
+        }
+    } else {
+        match cur_status {
+            Some(EntryStatus::Skipped) | None => (Some(EntryStatus::Completed), target_val, false),
+            Some(EntryStatus::Completed) => (Some(EntryStatus::Missed), 0.0, false),
+            Some(EntryStatus::Missed) => (Some(EntryStatus::Skipped), 0.0, true),
+        }
+    }
+}
+
 fn handle_history_click(
     habit: &crate::engine::models::Habit,
     clicked_date: chrono::NaiveDate,
@@ -298,19 +329,7 @@ fn handle_history_click(
     let cur_status = entries_click.borrow().get(&clicked_date).copied();
     let target_val = habit.habit_type.target().unwrap_or(1.0);
 
-    let (new_status, new_val, delete_db) = if is_scheduled {
-        match cur_status {
-            None | Some(EntryStatus::Missed) => (Some(EntryStatus::Completed), target_val, false),
-            Some(EntryStatus::Completed) => (Some(EntryStatus::Skipped), 0.0, false),
-            Some(EntryStatus::Skipped) => (None, 0.0, true),
-        }
-    } else {
-        match cur_status {
-            Some(EntryStatus::Skipped) | None => (Some(EntryStatus::Completed), target_val, false),
-            Some(EntryStatus::Completed) => (Some(EntryStatus::Missed), 0.0, false),
-            Some(EntryStatus::Missed) => (Some(EntryStatus::Skipped), 0.0, true),
-        }
-    };
+    let (new_status, new_val, delete_db) = next_entry_state(is_scheduled, cur_status, target_val);
 
     let write_res = {
         let inner = inner_click.borrow();

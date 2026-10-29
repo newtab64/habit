@@ -52,20 +52,7 @@ fn build_sidebar_header() -> (
     (sidebar_header, lock_btn, add_btn, menu_btn)
 }
 
-/// Constructs the habit list sidebar page and returns handles to its interactive widgets.
-#[must_use]
-pub fn build_sidebar() -> SidebarWidgets {
-    let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
-    let (sidebar_header, lock_btn, add_btn, menu_btn) = build_sidebar_header();
-    sidebar_box.append(&sidebar_header);
-
-    let sidebar_scrolled = gtk4::ScrolledWindow::new();
-    sidebar_scrolled.set_vexpand(true);
-    sidebar_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
-
-    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-
+fn build_quick_check_header() -> (gtk4::Box, gtk4::Label, Vec<gtk4::Label>) {
     let quick_check_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     quick_check_header.set_margin_start(12);
     quick_check_header.set_margin_end(12);
@@ -95,8 +82,25 @@ pub fn build_sidebar() -> SidebarWidgets {
         header_day_labels.push(lbl);
     }
     quick_check_header.append(&days_header_box);
-    content_box.append(&quick_check_header);
 
+    (quick_check_header, habit_score_label, header_day_labels)
+}
+
+/// Constructs the habit list sidebar page and returns handles to its interactive widgets.
+#[must_use]
+pub fn build_sidebar() -> SidebarWidgets {
+    let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+
+    let (sidebar_header, lock_btn, add_btn, menu_btn) = build_sidebar_header();
+    sidebar_box.append(&sidebar_header);
+
+    let sidebar_scrolled = gtk4::ScrolledWindow::new();
+    sidebar_scrolled.set_vexpand(true);
+    sidebar_scrolled.set_hscrollbar_policy(gtk4::PolicyType::Never);
+
+    let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+    let (quick_check_header, habit_score_label, header_day_labels) = build_quick_check_header();
+    content_box.append(&quick_check_header);
     content_box.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
 
     let habits_list_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
