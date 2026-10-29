@@ -279,11 +279,11 @@ impl Habit {
         (self.scheduled_days & Self::weekday_bit(weekday)) != 0
     }
 
-    /// Parses the habit's hex accent color into an [`Rgba`](crate::ui::charts::Rgba),
-    /// falling back to [`DEFAULT_ACCENT`](crate::ui::charts::DEFAULT_ACCENT).
+    /// Parses the habit's hex accent color into an [`Rgba`](crate::engine::color::Rgba),
+    /// falling back to [`DEFAULT_ACCENT`](crate::engine::color::DEFAULT_ACCENT).
     #[must_use]
-    pub fn accent_rgba(&self) -> crate::ui::charts::Rgba {
-        crate::ui::charts::Rgba::from_hex(&self.accent_color)
-            .unwrap_or(crate::ui::charts::DEFAULT_ACCENT)
+    pub fn accent_rgba(&self) -> crate::engine::color::Rgba {
+        crate::engine::color::Rgba::from_hex(&self.accent_color)
+            .unwrap_or(crate::engine::color::DEFAULT_ACCENT)
     }
 }
