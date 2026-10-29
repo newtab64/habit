@@ -1,3 +1,6 @@
+pub mod common;
+use common::HabitTestExt;
+
 use chrono::NaiveDate;
 use habit::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON,

@@ -259,51 +259,6 @@ impl Habit {
         }
     }
 
-    /// Creates a default daily binary habit.
-    #[must_use]
-    pub fn new_binary(name: impl Into<String>) -> Self {
-        Self::new(
-            name,
-            HabitType::Binary,
-            SCHEDULE_ALL_DAYS,
-            DEFAULT_ACCENT_COLOR,
-        )
-    }
-
-    /// Creates a default daily measurable habit.
-    #[must_use]
-    pub fn new_measurable(name: impl Into<String>, target: f64, unit: impl Into<String>) -> Self {
-        Self::new(
-            name,
-            HabitType::Measurable {
-                target,
-                unit: unit.into(),
-            },
-            SCHEDULE_ALL_DAYS,
-            DEFAULT_ACCENT_COLOR,
-        )
-    }
-
-    /// Creates an example workout habit scheduled on Mon, Wed, Fri, Sat.
-    #[must_use]
-    pub fn new_gym_example() -> Self {
-        Self {
-            id: None,
-            name: "Gym Workout".to_string(),
-            habit_type: HabitType::Binary,
-            accent_color: "#E01B24".to_string(),
-            scheduled_days: SCHEDULE_MON | SCHEDULE_WED | SCHEDULE_FRI | SCHEDULE_SAT,
-            archived: false,
-            created_at: 0,
-        }
-    }
-
-    /// Creates a generic test fixture habit for database and engine tests.
-    #[must_use]
-    pub fn test_fixture() -> Self {
-        Self::new_binary("Test Fixture Habit")
-    }
-
     /// Returns the bitmask bit corresponding to a weekday ($1 = \text{Mon} \dots 64 = \text{Sun}$).
     #[must_use]
     pub const fn weekday_bit(weekday: chrono::Weekday) -> u8 {
@@ -322,26 +277,5 @@ impl Habit {
     #[must_use]
     pub const fn is_scheduled_on(&self, weekday: chrono::Weekday) -> bool {
         (self.scheduled_days & Self::weekday_bit(weekday)) != 0
-    }
-
-    /// Sets the habit ID (builder method).
-    #[must_use]
-    pub const fn with_id(mut self, id: i64) -> Self {
-        self.id = Some(id);
-        self
-    }
-
-    /// Sets the scheduled days bitmask (builder method).
-    #[must_use]
-    pub const fn with_schedule(mut self, scheduled_days: u8) -> Self {
-        self.scheduled_days = scheduled_days;
-        self
-    }
-
-    /// Sets the accent color (builder method).
-    #[must_use]
-    pub fn with_color(mut self, color: impl Into<String>) -> Self {
-        self.accent_color = color.into();
-        self
     }
 }

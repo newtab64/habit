@@ -1,3 +1,6 @@
+pub mod common;
+use common::HabitTestExt;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 

@@ -1,3 +1,6 @@
+pub mod common;
+use common::HabitTestExt;
+
 use chrono::NaiveDate;
 use habit::engine::db::{Database, DbError};
 use habit::engine::models::{EntryStatus, Habit};

@@ -1,3 +1,6 @@
+pub mod common;
+use common::HabitTestExt;
+
 use chrono::{NaiveDate, Weekday};
 use habit::engine::models::{
     normalize_hex_color, ColorError, EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS,
