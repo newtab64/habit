@@ -53,7 +53,7 @@ pub struct DetailsWidgets {
     pub edit_mode_btn: gtk4::Button,
     /// Drawing area rendering the rolling habit heatmap.
     pub heatmap_drawing_area: gtk4::DrawingArea,
-    /// History editor bottom sheet overlay widgets.
+    /// History editor card overlay widgets.
     pub history_editor: HistoryEditorWidgets,
 }
 

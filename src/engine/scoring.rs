@@ -314,14 +314,3 @@ pub fn calculate_score_history(
 
     collect_score_window(&score_by_date, window_start, as_of, days)
 }
-
-/// Backwards-compatibility alias for `calculate_score_history`.
-#[must_use]
-pub fn calculate_strength_history(
-    habit: &Habit,
-    entries: &[HabitEntry],
-    days: usize,
-    as_of: NaiveDate,
-) -> Vec<f64> {
-    calculate_score_history(habit, entries, days, as_of)
-}

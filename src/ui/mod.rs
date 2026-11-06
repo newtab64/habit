@@ -6,6 +6,8 @@ pub mod habit_row;
 #[cfg(feature = "ui")]
 pub mod history_editor;
 pub mod metrics;
+#[cfg(feature = "ui")]
+pub mod modal;
 pub mod portal;
 #[cfg(feature = "ui")]
 pub mod sidebar;

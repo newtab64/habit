@@ -287,7 +287,6 @@ fn build_app_window(app: &libadwaita::Application) -> libadwaita::ApplicationWin
 #[derive(Debug, Clone)]
 pub struct HabitWindow {
     window: libadwaita::ApplicationWindow,
-    nav_view: libadwaita::NavigationView,
     toast_overlay: libadwaita::ToastOverlay,
 }
 
@@ -402,27 +401,8 @@ impl HabitWindow {
 
         Self {
             window,
-            nav_view,
             toast_overlay,
         }
-    }
-
-    /// Returns a reference to the wrapped `libadwaita::ApplicationWindow`.
-    #[must_use]
-    pub const fn window(&self) -> &libadwaita::ApplicationWindow {
-        &self.window
-    }
-
-    /// Returns a reference to the `libadwaita::NavigationView`.
-    #[must_use]
-    pub const fn nav_view(&self) -> &libadwaita::NavigationView {
-        &self.nav_view
-    }
-
-    /// Returns a reference to the `libadwaita::ToastOverlay`.
-    #[must_use]
-    pub const fn toast_overlay(&self) -> &libadwaita::ToastOverlay {
-        &self.toast_overlay
     }
 
     /// Presents the application window to the user.
@@ -481,6 +461,12 @@ pub fn run_app() {
         eprintln!("Habit is already running.");
         return;
     };
+
+    app.connect_startup(|_| {
+        if let Some(settings) = gtk4::Settings::default() {
+            settings.set_gtk_enable_animations(false);
+        }
+    });
 
     app.connect_activate(|app| {
         if let Some(window) = app

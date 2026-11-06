@@ -119,18 +119,31 @@ fn attach_measurable_popover<F: Fn(i64, NaiveDate, Option<f64>) + 'static>(
     let log_btn = gtk4::Button::with_label("Log");
     log_btn.add_css_class("suggested-action");
 
-    let pop_close = popover.clone();
+    // Weak: the popover owns this button, so a strong ref here would be a cycle.
+    let pop_close = popover.downgrade();
     log_btn.connect_clicked(move |_| {
         let val = spin.value();
-        pop_close.popdown();
+        if let Some(pop) = pop_close.upgrade() {
+            pop.popdown();
+        }
         on_toggle(habit_id, date, Some(val));
     });
     pop_box.append(&log_btn);
 
     popover.set_child(Some(&pop_box));
 
+    // The parent owns the popover; GTK requires unparenting it before the parent dies.
+    let pop_open = popover.downgrade();
     parent.connect_clicked(move |_| {
-        popover.popup();
+        if let Some(pop) = pop_open.upgrade() {
+            pop.popup();
+        }
+    });
+    let pop_destroy = popover.downgrade();
+    parent.connect_destroy(move |_| {
+        if let Some(pop) = pop_destroy.upgrade() {
+            pop.unparent();
+        }
     });
 }
 

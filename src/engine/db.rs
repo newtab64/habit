@@ -222,7 +222,7 @@ impl Database {
     pub fn get_habits(&self) -> Result<Vec<Habit>, DbError> {
         let mut habits = Vec::new();
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
              FROM habits ORDER BY sort_order ASC, id ASC;",
         )?;
@@ -261,7 +261,7 @@ impl Database {
     /// Returns [`DbError`] if querying fails.
     pub fn get_habit(&self, id: i64) -> Result<Option<Habit>, DbError> {
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT id, name, habit_type, target_value, unit, accent_color, scheduled_days, archived, created_at
              FROM habits WHERE id = ?1;",
         )?;
@@ -380,7 +380,7 @@ impl Database {
         let to_str = to.format("%Y-%m-%d").to_string();
         let mut entries = Vec::new();
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT habit_id, date, entry_status, value
              FROM habit_entries
              WHERE habit_id = ?1 AND date >= ?2 AND date <= ?3
@@ -403,7 +403,7 @@ impl Database {
     pub fn get_entry(&self, habit_id: i64, date: NaiveDate) -> Result<Option<HabitEntry>, DbError> {
         let date_str = date.format("%Y-%m-%d").to_string();
         let conn = self.lock_conn()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT habit_id, date, entry_status, value
              FROM habit_entries
              WHERE habit_id = ?1 AND date = ?2;",

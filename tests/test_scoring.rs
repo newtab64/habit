@@ -4,7 +4,7 @@ use common::HabitTestExt;
 use chrono::NaiveDate;
 use habit::engine::models::{EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS};
 use habit::engine::scoring::{
-    calculate_habit_score, calculate_streaks, calculate_strength_history, DEFAULT_HALF_LIFE_DAYS,
+    calculate_habit_score, calculate_score_history, calculate_streaks, DEFAULT_HALF_LIFE_DAYS,
 };
 
 #[test]
@@ -168,7 +168,7 @@ fn test_unlogged_past_scheduled_day_breaks_streak_and_decays() {
     assert_eq!(best, 1);
 
     // In history from d3, d2 was an unlogged past day, so d2 decayed compared to d1
-    let history = calculate_strength_history(&habit, &entries, 3, d3);
+    let history = calculate_score_history(&habit, &entries, 3, d3);
     assert_eq!(history.len(), 3);
     assert!(
         history[1] < history[0],
@@ -253,7 +253,7 @@ fn test_strength_history() {
     ];
 
     // Request 5 days history ending at d3 (d-1, d0, d1, d2, d3)
-    let history = calculate_strength_history(&habit, &entries, 5, d3);
+    let history = calculate_score_history(&habit, &entries, 5, d3);
     assert_eq!(history.len(), 5);
 
     // Days before d1 should be 0.0
@@ -284,7 +284,7 @@ fn test_empty_entries_handling() {
     let strength = calculate_habit_score(&habit, &entries, d);
     assert_eq!(strength, 0.0);
 
-    let history = calculate_strength_history(&habit, &entries, 7, d);
+    let history = calculate_score_history(&habit, &entries, 7, d);
     assert_eq!(history.len(), 7);
     assert!(history.iter().all(|&v| v == 0.0));
 }

@@ -6,44 +6,37 @@ use libadwaita::prelude::*;
 
 use crate::engine::models::Habit;
 use crate::ui::habit_dialog::validate_habit_form;
+use crate::ui::modal::{build_card_header, build_modal, connect_backdrop_click, Modal};
 
 use form_groups::{build_form_page, HabitFormRows};
 
-fn build_sheet_header(title: &str) -> (gtk4::CenterBox, gtk4::Button, gtk4::Button) {
-    let sheet_header = gtk4::CenterBox::new();
-    sheet_header.add_css_class("editor-sheet-header");
-    sheet_header.set_margin_start(16);
-    sheet_header.set_margin_end(16);
-    sheet_header.set_margin_top(12);
-    sheet_header.set_margin_bottom(10);
+const DIALOG_WIDTH: i32 = 440;
+
+fn build_dialog_header(title: &str) -> (gtk4::CenterBox, gtk4::Button, gtk4::Button) {
+    let header = build_card_header(16);
 
     let cancel_btn = gtk4::Button::with_label("Cancel");
     cancel_btn.add_css_class("destructive-action");
-    sheet_header.set_start_widget(Some(&cancel_btn));
-
-    let window_title = libadwaita::WindowTitle::new(title, "");
-    sheet_header.set_center_widget(Some(&window_title));
+    header.set_start_widget(Some(&cancel_btn));
+    header.set_center_widget(Some(&libadwaita::WindowTitle::new(title, "")));
 
     let save_btn = gtk4::Button::with_label("Save");
     save_btn.add_css_class("suggested-action");
-    sheet_header.set_end_widget(Some(&save_btn));
+    header.set_end_widget(Some(&save_btn));
 
-    (sheet_header, cancel_btn, save_btn)
+    (header, cancel_btn, save_btn)
 }
 
-fn build_sheet_revealer(
-    sheet_header: &gtk4::CenterBox,
+fn fill_dialog_card(
+    card: &gtk4::Box,
+    header: &gtk4::CenterBox,
     pref_page: &libadwaita::PreferencesPage,
-) -> (libadwaita::ToastOverlay, gtk4::Revealer) {
-    let sheet_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    sheet_box.set_valign(gtk4::Align::End);
-    sheet_box.set_hexpand(true);
-    sheet_box.add_css_class("editor-bottom-sheet");
-    sheet_box.append(sheet_header);
+) -> libadwaita::ToastOverlay {
+    card.append(header);
 
     let header_sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
     header_sep.set_margin_bottom(6);
-    sheet_box.append(&header_sep);
+    card.append(&header_sep);
 
     let toast_overlay = libadwaita::ToastOverlay::new();
     toast_overlay.set_child(Some(pref_page));
@@ -55,67 +48,33 @@ fn build_sheet_revealer(
     scrolled.set_propagate_natural_height(true);
     scrolled.set_margin_bottom(12);
     scrolled.set_child(Some(&toast_overlay));
-    sheet_box.append(&scrolled);
+    card.append(&scrolled);
 
-    let sheet_revealer = gtk4::Revealer::new();
-    sheet_revealer.set_transition_type(gtk4::RevealerTransitionType::SlideUp);
-    sheet_revealer.set_transition_duration(180);
-    sheet_revealer.set_child(Some(&sheet_box));
-    sheet_revealer.set_valign(gtk4::Align::End);
-    sheet_revealer.set_hexpand(true);
-    sheet_revealer.set_reveal_child(false);
-
-    (toast_overlay, sheet_revealer)
+    toast_overlay
 }
 
 fn create_close_callback(
-    dialog_container: &gtk4::Box,
-    sheet_revealer: &gtk4::Revealer,
+    dialog_container: &gtk4::Overlay,
     root_overlay: &gtk4::Overlay,
 ) -> impl Fn() + Clone + 'static {
-    let closed = std::rc::Rc::new(std::cell::Cell::new(false));
-    let overlay_for_close = root_overlay.clone();
-    let container_for_close = dialog_container.clone();
-    let revealer_for_close = sheet_revealer.clone();
+    let overlay = root_overlay.clone();
+    let container = dialog_container.clone();
     move || {
-        if !closed.get() {
-            closed.set(true);
-            revealer_for_close.set_reveal_child(false);
-            let overlay_rm = overlay_for_close.clone();
-            let cont_rm = container_for_close.clone();
-            let removed = std::rc::Rc::new(std::cell::Cell::new(false));
-            let removed_clone = removed.clone();
-            revealer_for_close.connect_child_revealed_notify(move |rev| {
-                if !rev.is_child_revealed() && !removed_clone.get() {
-                    removed_clone.set(true);
-                    overlay_rm.remove_overlay(&cont_rm);
-                }
-            });
-            if !revealer_for_close.is_child_revealed() && !removed.get() {
-                removed.set(true);
-                overlay_for_close.remove_overlay(&container_for_close);
-            }
+        if container.parent().is_some() {
+            overlay.remove_overlay(&container);
         }
     }
 }
 
 fn wire_dismiss_signals(
-    dialog_container: &gtk4::Box,
-    dialog_dimming: &gtk4::Box,
+    modal: &Modal,
     cancel_btn: &gtk4::Button,
     close_dialog: &(impl Fn() + Clone + 'static),
 ) {
     let close_cancel = close_dialog.clone();
-    cancel_btn.connect_clicked(move |_| {
-        close_cancel();
-    });
+    cancel_btn.connect_clicked(move |_| close_cancel());
 
-    let close_dimming = close_dialog.clone();
-    let dim_gesture = gtk4::GestureClick::new();
-    dim_gesture.connect_pressed(move |_, _, _, _| {
-        close_dimming();
-    });
-    dialog_dimming.add_controller(dim_gesture);
+    connect_backdrop_click(&modal.backdrop, close_dialog.clone());
 
     let close_key = close_dialog.clone();
     let key_controller = gtk4::EventControllerKey::new();
@@ -127,7 +86,7 @@ fn wire_dismiss_signals(
             gtk4::glib::Propagation::Proceed
         }
     });
-    dialog_container.add_controller(key_controller);
+    modal.container.add_controller(key_controller);
 }
 
 fn connect_save_button(
@@ -144,12 +103,11 @@ fn connect_save_button(
         let target = form.target_row.value();
         let unit = form.unit_row.text().to_string();
 
-        let mut scheduled_days = 0u8;
-        for (bit, s) in &form.switch_rows {
-            if s.is_active() {
-                scheduled_days |= *bit;
-            }
-        }
+        let scheduled_days = form
+            .switch_rows
+            .iter()
+            .filter(|(_, row)| row.is_active())
+            .fold(0u8, |mask, (bit, _)| mask | bit);
 
         let hex_color = form.hex_row.text().to_string();
 
@@ -172,10 +130,10 @@ fn connect_save_button(
     });
 }
 
-/// Displays an animated bottom sheet dialog for creating or editing a habit.
+/// Displays a centered card dialog for creating or editing a habit.
 ///
 /// # Arguments
-/// * `root_overlay` - The root overlay of the application window where this panel docks.
+/// * `root_overlay` - The root overlay of the application window where the dialog is shown.
 /// * `habit` - `None` when creating a new habit, or `Some(&habit)` when editing.
 /// * `on_save` - Callback invoked with the validated `Habit` when confirmed.
 pub fn show_habit_dialog(
@@ -189,26 +147,14 @@ pub fn show_habit_dialog(
         "New Habit"
     };
 
-    let dialog_container = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    dialog_container.add_css_class("editor-dimming-backdrop");
-
-    let dialog_dimming = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
-    dialog_dimming.set_vexpand(true);
-    dialog_dimming.set_hexpand(true);
-    dialog_container.append(&dialog_dimming);
-
-    let (sheet_header, cancel_btn, save_btn) = build_sheet_header(title);
+    let modal = build_modal(DIALOG_WIDTH);
+    let (header, cancel_btn, save_btn) = build_dialog_header(title);
     let (pref_page, form) = build_form_page(habit);
-    let (toast_overlay, sheet_revealer) = build_sheet_revealer(&sheet_header, &pref_page);
-    dialog_container.append(&sheet_revealer);
+    let name_row = form.name_row.clone();
+    let toast_overlay = fill_dialog_card(&modal.card, &header, &pref_page);
 
-    let close_dialog = create_close_callback(&dialog_container, &sheet_revealer, root_overlay);
-    wire_dismiss_signals(
-        &dialog_container,
-        &dialog_dimming,
-        &cancel_btn,
-        &close_dialog,
-    );
+    let close_dialog = create_close_callback(&modal.container, root_overlay);
+    wire_dismiss_signals(&modal, &cancel_btn, &close_dialog);
     connect_save_button(
         &save_btn,
         form,
@@ -218,6 +164,6 @@ pub fn show_habit_dialog(
         on_save,
     );
 
-    root_overlay.add_overlay(&dialog_container);
-    sheet_revealer.set_reveal_child(true);
+    root_overlay.add_overlay(&modal.container);
+    name_row.grab_focus();
 }

@@ -340,32 +340,13 @@ fn test_css_parsing_cleanliness() {
                 errors.borrow()
             );
 
-            // Also verify the bottom-sheet dimming & seamless docking CSS
-            let sheet_css = ".editor-dimming-backdrop {\n\
-                  background-color: rgba(0, 0, 0, 0.45);\n\
-                }\n\
-                .editor-bottom-sheet {\n\
-                  background-color: var(--window-bg-color);\n\
-                  border-top-left-radius: 16px;\n\
-                  border-top-right-radius: 16px;\n\
-                  border-bottom-left-radius: 0;\n\
-                  border-bottom-right-radius: 0;\n\
-                  border: 1px solid rgba(0, 0, 0, 0.12);\n\
-                  border-bottom: none;\n\
-                  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n\
-                  margin-left: 20px;\n\
-                  margin-right: 20px;\n\
-                  margin-bottom: 0;\n\
-                }\n\
-                button.destructive-action.flat,\n\
-                button.destructive-action.flat image {\n\
-                  color: #e01b24;\n\
-                }\n";
+            // Also verify the shipped base stylesheet (cards, backdrop, buttons)
+            let sheet_css = habit::ui::state::BASE_CSS;
             provider.load_from_data(sheet_css);
-            println!("Errors captured for sheet CSS: {:?}", errors.borrow());
+            println!("Errors captured for base CSS: {:?}", errors.borrow());
             assert!(
                 errors.borrow().is_empty(),
-                "Sheet CSS had parser errors: {:?}",
+                "Base CSS had parser errors: {:?}",
                 errors.borrow()
             );
         }

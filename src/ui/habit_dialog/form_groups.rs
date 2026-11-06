@@ -168,21 +168,14 @@ fn build_schedule_group(
     (group, switch_rows)
 }
 
-fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, libadwaita::EntryRow) {
-    let group = libadwaita::PreferencesGroup::new();
-    group.set_title("Accent Color");
-
-    let hex_row = libadwaita::EntryRow::new();
-    hex_row.set_title("Hex Code");
-    hex_row.set_text(initial_color);
-    group.add(&hex_row);
-
-    let palette_row = libadwaita::ActionRow::new();
-    palette_row.set_title("Preset Palette");
-
-    let palette_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
-    palette_box.set_valign(gtk4::Align::Center);
-
+/// Registers the palette swatch styles on the display, once per process.
+fn install_swatch_css() {
+    thread_local! {
+        static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    if INSTALLED.with(|done| done.replace(true)) {
+        return;
+    }
     let mut css = String::new();
     for (idx, color) in GNOME_PALETTE.iter().enumerate() {
         let _ = writeln!(
@@ -199,6 +192,24 @@ fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, liba
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+}
+
+fn build_color_group(initial_color: &str) -> (libadwaita::PreferencesGroup, libadwaita::EntryRow) {
+    let group = libadwaita::PreferencesGroup::new();
+    group.set_title("Accent Color");
+
+    let hex_row = libadwaita::EntryRow::new();
+    hex_row.set_title("Hex Code");
+    hex_row.set_text(initial_color);
+    group.add(&hex_row);
+
+    let palette_row = libadwaita::ActionRow::new();
+    palette_row.set_title("Preset Palette");
+
+    let palette_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+    palette_box.set_valign(gtk4::Align::Center);
+
+    install_swatch_css();
 
     for (idx, color) in GNOME_PALETTE.iter().enumerate() {
         let swatch = gtk4::Button::new();

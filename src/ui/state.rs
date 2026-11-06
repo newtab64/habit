@@ -1,13 +1,13 @@
 use crate::engine::db::Database;
 use crate::engine::models::{EntryStatus, Habit, HabitEntry};
-use crate::engine::scoring::{calculate_habit_score, calculate_strength_history};
+use crate::engine::scoring::{calculate_habit_score, calculate_score_history};
 use crate::ui::charts::{Rgba, DEFAULT_ACCENT};
 use crate::ui::habit_row::HabitRowWidget;
 use crate::ui::metrics::{
-    calculate_habit_metrics, format_schedule_summary, format_target_summary, toggle_entry_state,
-    HabitMetrics,
+    build_status_map, calculate_habit_metrics, format_schedule_summary, format_target_summary,
+    toggle_entry_state, HabitMetrics, HISTORY_WEEKS,
 };
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use gtk4::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -32,6 +32,8 @@ pub struct DrawCaches {
     pub editor_habit_id: Rc<Cell<Option<i64>>>,
     pub reorder_mode: Rc<Cell<bool>>,
     pub staged_habit_order: Rc<RefCell<Vec<i64>>>,
+    /// Last dynamic stylesheet loaded, so unchanged CSS is not reparsed on every refresh.
+    pub loaded_habit_css: Rc<RefCell<String>>,
 }
 
 impl DrawCaches {
@@ -53,6 +55,7 @@ impl DrawCaches {
             editor_habit_id: Rc::new(Cell::new(None)),
             reorder_mode: Rc::new(Cell::new(false)),
             staged_habit_order: Rc::new(RefCell::new(Vec::new())),
+            loaded_habit_css: Rc::new(RefCell::new(String::new())),
         }
     }
 }
@@ -179,13 +182,18 @@ pub const BASE_CSS: &str = "\
 .loop-popup-box {\n  min-width: 200px;\n}\n\
 .loop-popup-btn {\n  min-width: 48px;\n  min-height: 42px;\n  font-size: 19px;\n  font-weight: bold;\n}\n\
 .loop-popup-btn.muted {\n  color: #888888;\n}\n\
-.editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.45);\n}\n\
-.editor-bottom-sheet {\n  background-color: var(--window-bg-color);\n  border-top-left-radius: 16px;\n  border-top-right-radius: 16px;\n  border-bottom-left-radius: 0;\n  border-bottom-right-radius: 0;\n  border: 1px solid rgba(0, 0, 0, 0.12);\n  border-bottom: none;\n  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18);\n  margin-left: 10px;\n  margin-right: 10px;\n  margin-bottom: 0;\n}\n\
+.editor-dimming-backdrop {\n  background-color: rgba(0, 0, 0, 0.25);\n}\n\
+.editor-card {\n  background-color: var(--window-bg-color);\n  border-radius: 16px;\n  border: 1px solid rgba(0, 0, 0, 0.25);\n  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);\n}\n\
 button.quick-preset-btn {\n  font-size: 13px;\n  font-weight: 600;\n  padding-left: 10px;\n  padding-right: 10px;\n  padding-top: 4px;\n  padding-bottom: 4px;\n  min-height: 28px;\n  border-radius: 8px;\n}\n\
 button.destructive-action.flat,\n\
 button.destructive-action.flat image {\n  color: #e01b24;\n}\n";
 
-fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id: Option<i64>) {
+fn update_css(
+    provider: &gtk4::CssProvider,
+    loaded: &RefCell<String>,
+    habits: &[Habit],
+    selected_habit_id: Option<i64>,
+) {
     let mut dynamic_css = String::new();
     for h in habits {
         if let Some(hid) = h.id {
@@ -208,7 +216,10 @@ fn update_css(provider: &gtk4::CssProvider, habits: &[Habit], selected_habit_id:
             );
         }
     }
-    provider.load_from_data(&dynamic_css);
+    if *loaded.borrow() != dynamic_css {
+        provider.load_from_data(&dynamic_css);
+        *loaded.borrow_mut() = dynamic_css;
+    }
 }
 
 fn ordered_habits_for_render(
@@ -234,6 +245,9 @@ fn ordered_habits_for_render(
     }
     list
 }
+
+/// Full entry history of each habit, loaded once per refresh.
+type EntriesByHabit = HashMap<i64, Vec<HabitEntry>>;
 
 fn create_size_groups(inner: &WindowInner) -> (gtk4::SizeGroup, Vec<gtk4::SizeGroup>) {
     let left_group = gtk4::SizeGroup::new(gtk4::SizeGroupMode::Horizontal);
@@ -273,8 +287,8 @@ fn append_habit_row(
     caches: &DrawCaches,
     today: NaiveDate,
     size_groups: &(gtk4::SizeGroup, Vec<gtk4::SizeGroup>),
-) {
-    let Some(habit_id) = habit.id else { return };
+) -> Option<Vec<HabitEntry>> {
+    let habit_id = habit.id?;
     let entries = inner
         .db
         .get_entries(habit_id, NaiveDate::MIN, today)
@@ -293,10 +307,7 @@ fn append_habit_row(
         handle_select(&inner_sel, &caches_sel, hid);
     };
 
-    let Some(row_widget) = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select)
-    else {
-        return;
-    };
+    let row_widget = HabitRowWidget::new(habit, score, &entries, today, on_toggle, on_select)?;
     if caches.reorder_mode.get() {
         row_widget.enable_reorder_drag(
             habit_id,
@@ -314,6 +325,7 @@ fn append_habit_row(
         row_widget.widget().add_css_class("selected");
     }
     inner.habits_list_box.append(row_widget.widget());
+    Some(entries)
 }
 
 fn restore_scroll(adj: &gtk4::Adjustment, value: f64) {
@@ -328,7 +340,7 @@ fn rebuild_habit_list(
     habits: &[Habit],
     caches: &DrawCaches,
     today: NaiveDate,
-) {
+) -> EntriesByHabit {
     let size_groups = create_size_groups(inner);
     let scroll = inner.list_vadjustment.value();
 
@@ -342,11 +354,18 @@ fn rebuild_habit_list(
     let ordered_habits =
         ordered_habits_for_render(habits, is_reorder, &caches.staged_habit_order.borrow());
 
+    let mut entries_by_habit = EntriesByHabit::with_capacity(ordered_habits.len());
     for habit in &ordered_habits {
-        append_habit_row(inner_rc, inner, habit, caches, today, &size_groups);
+        if let Some(entries) = append_habit_row(inner_rc, inner, habit, caches, today, &size_groups)
+        {
+            if let Some(id) = habit.id {
+                entries_by_habit.insert(id, entries);
+            }
+        }
     }
 
     restore_scroll(&inner.list_vadjustment, scroll);
+    entries_by_habit
 }
 
 fn update_charts(
@@ -357,7 +376,7 @@ fn update_charts(
     caches: &DrawCaches,
     today: NaiveDate,
 ) {
-    let curve_pts = calculate_strength_history(selected_habit, all_entries, 30, today);
+    let curve_pts = calculate_score_history(selected_habit, all_entries, 30, today);
     let rgba = selected_habit.accent_rgba();
 
     *caches.curve_data.borrow_mut() = curve_pts;
@@ -374,28 +393,16 @@ fn update_charts(
     inner.today_week_btn.set_sensitive(week_offset > 0);
 
     let offset_weeks = i64::try_from(week_offset).unwrap_or(0);
-    let weeks_back = offset_weeks + 104;
+    let weeks_back = offset_weeks + i64::from(HISTORY_WEEKS);
     let heatmap_start = today - chrono::Duration::weeks(weeks_back);
-    let Some(sel_id) = selected_habit.id else {
-        return;
-    };
-    let h_entries = inner
-        .db
-        .get_entries(sel_id, heatmap_start, today)
-        .unwrap_or_default();
-
-    let mut map = HashMap::with_capacity(h_entries.len() + 100);
-    for e in h_entries {
-        map.insert(e.date, e.status);
-    }
-
-    let mut cur = heatmap_start;
-    while cur <= today {
-        if !map.contains_key(&cur) && !selected_habit.is_scheduled_on(cur.weekday()) {
-            map.insert(cur, EntryStatus::Skipped);
-        }
-        cur += chrono::Duration::days(1);
-    }
+    let map = build_status_map(
+        selected_habit,
+        all_entries
+            .iter()
+            .filter(|e| e.date >= heatmap_start && e.date <= today),
+        heatmap_start,
+        today,
+    );
 
     *caches.heatmap_entries.borrow_mut() = map;
     caches.heatmap_color.set(rgba);
@@ -413,7 +420,13 @@ fn set_diff_style(label: &gtk4::Label, value: f64) {
     }
 }
 
-fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, today: NaiveDate) {
+fn update_details(
+    inner: &WindowInner,
+    habits: &[Habit],
+    entries_by_habit: &EntriesByHabit,
+    caches: &DrawCaches,
+    today: NaiveDate,
+) {
     if let Some(sel_id) = inner.selected_habit_id {
         if let Some(selected_habit) = habits.iter().find(|h| h.id == Some(sel_id)) {
             inner.edit_btn.set_visible(true);
@@ -429,12 +442,17 @@ fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, to
                 .target_label
                 .set_text(&format!("Target: {target_text}"));
 
-            let start_bound = NaiveDate::MIN;
-            let all_entries = inner
-                .db
-                .get_entries(sel_id, start_bound, today)
-                .unwrap_or_default();
-            let metrics = calculate_habit_metrics(selected_habit, &all_entries, today);
+            let loaded;
+            let all_entries: &[HabitEntry] = if let Some(entries) = entries_by_habit.get(&sel_id) {
+                entries
+            } else {
+                loaded = inner
+                    .db
+                    .get_entries(sel_id, NaiveDate::MIN, today)
+                    .unwrap_or_default();
+                &loaded
+            };
+            let metrics = calculate_habit_metrics(selected_habit, all_entries, today);
 
             inner.score_card_value.set_text(&metrics.score_percent);
             inner
@@ -448,7 +466,7 @@ fn update_details(inner: &WindowInner, habits: &[Habit], caches: &DrawCaches, to
             set_diff_style(&inner.month_diff_card_value, metrics.month_diff);
             set_diff_style(&inner.year_diff_card_value, metrics.year_diff);
 
-            update_charts(inner, selected_habit, &all_entries, &metrics, caches, today);
+            update_charts(inner, selected_habit, all_entries, &metrics, caches, today);
             return;
         }
     }
@@ -478,7 +496,12 @@ pub fn refresh(inner_rc: &Rc<RefCell<WindowInner>>, caches: &DrawCaches) {
     };
 
     update_header_dates(&inner.header_day_labels, today);
-    update_css(&inner.habit_css_provider, &habits, inner.selected_habit_id);
-    rebuild_habit_list(inner_rc, &inner, &habits, caches, today);
-    update_details(&inner, &habits, caches, today);
+    update_css(
+        &inner.habit_css_provider,
+        &caches.loaded_habit_css,
+        &habits,
+        inner.selected_habit_id,
+    );
+    let entries_by_habit = rebuild_habit_list(inner_rc, &inner, &habits, caches, today);
+    update_details(&inner, &habits, &entries_by_habit, caches, today);
 }

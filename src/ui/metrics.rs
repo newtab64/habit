@@ -4,7 +4,9 @@
 //! badge and percentage formatting, habit metric calculations, and entry toggle state transitions.
 //! It has zero dependencies on UI toolkits (GTK, Libadwaita, Cairo).
 
-use chrono::NaiveDate;
+use std::collections::HashMap;
+
+use chrono::{Datelike, NaiveDate};
 
 use crate::engine::models::{
     EntryStatus, Habit, HabitEntry, HabitType, SCHEDULE_ALL_DAYS, SCHEDULE_FRI, SCHEDULE_MON,
@@ -13,6 +15,28 @@ use crate::engine::models::{
 };
 use crate::engine::scoring::{calculate_habit_score, calculate_streaks};
 use crate::ui::habit_row::{format_measurable_value, next_toggle_status};
+
+/// Number of weeks of history shown by the heatmaps and the history editor.
+pub const HISTORY_WEEKS: u32 = 104;
+
+/// Builds the date -> status map drawn by the heatmaps: recorded entries, plus
+/// `Skipped` for every unscheduled day in `start..=today` that has no entry.
+#[must_use]
+pub fn build_status_map<'a>(
+    habit: &Habit,
+    entries: impl IntoIterator<Item = &'a HabitEntry>,
+    start: NaiveDate,
+    today: NaiveDate,
+) -> HashMap<NaiveDate, EntryStatus> {
+    let mut map: HashMap<NaiveDate, EntryStatus> =
+        entries.into_iter().map(|e| (e.date, e.status)).collect();
+    for day in start.iter_days().take_while(|d| *d <= today) {
+        if !habit.is_scheduled_on(day.weekday()) {
+            map.entry(day).or_insert(EntryStatus::Skipped);
+        }
+    }
+    map
+}
 
 /// Formats a weekday bitmask into human-readable schedule text.
 ///
